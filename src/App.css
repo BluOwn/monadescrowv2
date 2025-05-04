@@ -1,7 +1,353 @@
+:root {
+  --primary-color: #6c5ce7;
+  --primary-hover: #5649c8;
+  --secondary-color: #00b894;
+  --secondary-hover: #00a381;
+  --danger-color: #e74c3c;
+  --warning-color: #f39c12;
+  --light-bg: #f8f9fa;
+  --dark-text: #2d3436;
+  --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08);
+  --transition: all 0.3s ease;
+  
+  /* Role colors */
+  --buyer-color: #3498db;
+  --seller-color: #00b894;
+  --arbiter-color: #9b59b6;
+}
+
 body {
-  background-color: #f5f5f5;
+  background: linear-gradient(135deg, #dfe6e9 0%, #f8f9fa 100%);
+  color: var(--dark-text);
+  font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 }
 
 .container {
   max-width: 800px;
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: var(--card-shadow);
+  padding: 30px;
+  margin-top: 50px;
+  margin-bottom: 50px;
+}
+
+.app-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.app-header h1 {
+  font-weight: 700;
+  color: var(--primary-color);
+  margin-bottom: 15px;
+}
+
+.app-header p {
+  color: #636e72;
+  font-size: 1.1rem;
+}
+
+.connect-wallet-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 0;
+}
+
+.wallet-button {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: var(--transition);
+  font-size: 1rem;
+}
+
+.wallet-button:hover {
+  background-color: var(--primary-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 7px 14px rgba(50, 50, 93, 0.1), 0 3px 6px rgba(0, 0, 0, 0.08);
+}
+
+.wallet-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--light-bg);
+  padding: 10px 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.network-badge {
+  background-color: var(--secondary-color);
+  color: white;
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-left: 8px;
+}
+
+.card {
+  border: none;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  margin-bottom: 25px;
+}
+
+.card-title {
+  font-weight: 600;
+  color: var(--primary-color);
+  margin-bottom: 20px;
+}
+
+.form-label {
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.form-control {
+  border-radius: 8px;
+  padding: 12px 15px;
+  border: 1px solid #dfe6e9;
+  transition: var(--transition);
+}
+
+.form-control:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.1);
+}
+
+.form-text {
+  font-size: 0.8rem;
+  color: #636e72;
+}
+
+.btn-primary {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  font-weight: 500;
+  padding: 10px 20px;
+  border-radius: 8px;
+  transition: var(--transition);
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-hover);
+  border-color: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.btn-success {
+  background-color: var(--secondary-color);
+  border-color: var(--secondary-color);
+}
+
+.btn-success:hover {
+  background-color: var(--secondary-hover);
+  border-color: var(--secondary-hover);
+}
+
+.btn-danger {
+  background-color: var(--danger-color);
+  border-color: var(--danger-color);
+}
+
+.btn-warning {
+  background-color: var(--warning-color);
+  border-color: var(--warning-color);
+}
+
+.btn-outline-info {
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.btn-outline-info:hover {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.list-group-item {
+  border-left: none;
+  border-right: none;
+  padding: 15px;
+  transition: var(--transition);
+}
+
+.list-group-item:hover {
+  background-color: var(--light-bg);
+}
+
+.escrow-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.escrow-info {
+  flex: 1;
+}
+
+.escrow-status {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-top: 5px;
+}
+
+.status-active {
+  background-color: #6c5ce7;
+  color: white;
+}
+
+.status-disputed {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.status-completed {
+  background-color: #00b894;
+  color: white;
+}
+
+/* Role badges */
+.role-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-right: 5px;
+  margin-top: 5px;
+  margin-bottom: 5px;
+}
+
+.buyer-badge {
+  background-color: var(--buyer-color);
+  color: white;
+}
+
+.seller-badge {
+  background-color: var(--seller-color);
+  color: white;
+}
+
+.arbiter-badge {
+  background-color: var(--arbiter-color);
+  color: white;
+}
+
+.escrow-roles {
+  margin-top: 5px;
+  margin-bottom: 5px;
+}
+
+/* Arbiter specific styles */
+.arbiter-item {
+  border-left: 3px solid var(--arbiter-color);
+  background-color: rgba(155, 89, 182, 0.05);
+}
+
+.arbiter-notice {
+  background-color: rgba(155, 89, 182, 0.1);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.arbiter-actions {
+  border-top: 1px solid #eee;
+  padding-top: 10px;
+}
+
+.user-role-section {
+  background-color: #f8f9fa;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 15px;
+}
+
+.user-role-indicator {
+  margin-bottom: 5px;
+}
+
+.nav-tabs .nav-link {
+  font-weight: 500;
+  color: #636e72;
+  padding: 10px 15px;
+  border: none;
+  transition: var(--transition);
+}
+
+.nav-tabs .nav-link.active {
+  color: var(--primary-color);
+  background-color: transparent;
+  border-bottom: 2px solid var(--primary-color);
+}
+
+.modal-content {
+  border-radius: 12px;
+  box-shadow: var(--card-shadow);
+}
+
+.modal-header {
+  border-bottom: 1px solid #f1f1f1;
+  padding: 15px 20px;
+}
+
+.modal-title {
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-footer {
+  border-top: 1px solid #f1f1f1;
+  padding: 15px 20px;
+}
+
+.address-display {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+  display: inline-block;
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: 20px;
+    margin-top: 20px;
+    margin-bottom: 20px;
+  }
+  
+  .address-display {
+    max-width: 150px;
+  }
+}
+
+.footer {
+  text-align: center;
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid #eee;
+  color: #636e72;
+  font-size: 0.9rem;
+}
+
+.footer a {
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
 }
