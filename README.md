@@ -2,7 +2,7 @@
 
 A secure, decentralized escrow service built on Monad Testnet. This application allows users to create escrow agreements, manage funds, and resolve disputes using smart contracts.
 
-![Monad Escrow Screenshot](https://placeholder-image.com/monad-escrow-screenshot.png)
+![Monad Escrow Screenshot](https://github.com/BluOwn/monadescrow/blob/main/Screenshot.png)
 
 ## Features
 
