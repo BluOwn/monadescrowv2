@@ -1147,8 +1147,21 @@ function App() {
                 Created by <a href={`https://twitter.com/${CREATOR_TWITTER.substring(1)}`} target="_blank" rel="noopener noreferrer">{CREATOR_TWITTER}</a>
               </p>
               <p>
-                Creator wallet: <span className="address-display">{CREATOR_WALLET}</span>
-              </p>
+  Creator wallet:{" "}
+  <a
+    href={`https://testnet.monadexplorer.com/address/${CREATOR_WALLET}`}
+    onClick={(e) => {
+      e.preventDefault(); // prevent default to control the behavior
+      navigator.clipboard.writeText(CREATOR_WALLET); // copy to clipboard
+      window.open(e.currentTarget.href, "_blank"); // open in new tab
+    }}
+    style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
+    title="Click to open and copy"
+  >
+    {CREATOR_WALLET}
+  </a>
+</p>
+
               <p>
                 <a href="https://github.com/your-github-username/monad-escrow" target="_blank" rel="noopener noreferrer">View on GitHub</a>
               </p>
