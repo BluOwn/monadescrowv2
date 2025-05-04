@@ -1163,7 +1163,7 @@ function App() {
 </p>
 
               <p>
-                <a href="https://github.com/your-github-username/monad-escrow" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+                <a href="https://github.com/BluOwn/monadescrow" target="_blank" rel="noopener noreferrer">View on GitHub</a>
               </p>
             </div>
           </>

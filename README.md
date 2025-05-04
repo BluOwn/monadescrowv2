@@ -15,7 +15,7 @@ A secure, decentralized escrow service built on Monad Testnet. This application 
 
 ## Demo
 
-Visit the live demo at: [https://monad-escrow.vercel.app](https://monad-escrow.vercel.app)
+Visit the live demo at: [https://monadescrow.vercel.app/](https://monadescrow.vercel.app/)
 
 ## How to Use
 
@@ -111,7 +111,7 @@ The escrow service is powered by a smart contract with the following features:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-github-username/monad-escrow.git
+   git clone https://github.com/BluOwn/monadescrow.git
    cd monad-escrow
    ```
 
