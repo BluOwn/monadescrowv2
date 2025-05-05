@@ -169,25 +169,36 @@ export const useWeb3 = (contractAddress, contractAbi) => {
       return cached.data;
     }
     
-    // Otherwise fetch fresh data
-    const details = await state.contract.getEscrow(escrowId);
-    const escrowData = {
-      id: escrowId,
-      buyer: details[0],
-      seller: details[1],
-      arbiter: details[2],
-      amount: ethers.formatEther(details[3]),
-      fundsDisbursed: details[4],
-      disputeRaised: details[5]
-    };
-    
-    // Update cache
-    escrowCache.set(cacheKey, {
-      timestamp: now,
-      data: escrowData
-    });
-    
-    return escrowData;
+    try {
+      // Otherwise fetch fresh data
+      const details = await state.contract.getEscrow(escrowId);
+      
+      // Ensure we have valid details before processing
+      if (!details || !details[0]) {
+        throw new Error(`Invalid escrow data returned for ID: ${escrowId}`);
+      }
+      
+      const escrowData = {
+        id: Number(escrowId), // Convert to Number for safety
+        buyer: details[0],
+        seller: details[1],
+        arbiter: details[2],
+        amount: ethers.formatEther(details[3]),
+        fundsDisbursed: details[4],
+        disputeRaised: details[5]
+      };
+      
+      // Update cache
+      escrowCache.set(cacheKey, {
+        timestamp: now,
+        data: escrowData
+      });
+      
+      return escrowData;
+    } catch (error) {
+      console.error(`Error fetching escrow #${escrowId}:`, error);
+      throw new Error(`Failed to fetch escrow #${escrowId}: ${error.message}`);
+    }
   }, [state.contract]);
 
   // Load user's escrows with batching when possible
@@ -197,13 +208,34 @@ export const useWeb3 = (contractAddress, contractAbi) => {
     }
 
     try {
-      const escrowIds = await state.contract.getUserEscrows(userAddress);
+      let escrowIds;
+      try {
+        // Try to get user escrows, but handle potential errors
+        escrowIds = await state.contract.getUserEscrows(userAddress);
+      } catch (contractError) {
+        console.warn("Contract call to getUserEscrows failed:", contractError);
+        // Return empty array instead of failing completely
+        return [];
+      }
       
-      // Prepare promises for all escrow details
-      const promises = escrowIds.map(id => getEscrowWithCache(id));
+      // Only proceed if we have escrow IDs
+      if (!escrowIds || escrowIds.length === 0) {
+        return [];
+      }
       
-      // Wait for all promises to resolve
-      const escrowDetails = await Promise.all(promises);
+      // Process each escrow ID individually to prevent one failure from blocking all
+      const escrowDetails = [];
+      
+      for (const id of escrowIds) {
+        try {
+          const escrow = await getEscrowWithCache(id);
+          escrowDetails.push(escrow);
+        } catch (err) {
+          console.warn(`Failed to load escrow #${id}:`, err);
+          // Continue to next escrow instead of failing completely
+        }
+      }
+      
       return escrowDetails;
     } catch (error) {
       console.error("Error loading escrows", error);
@@ -218,9 +250,14 @@ export const useWeb3 = (contractAddress, contractAbi) => {
     }
 
     try {
-      // Get total escrow count - this could potentially be expensive
-      // In production, consider using events or indexing
-      const escrowCount = await state.contract.getEscrowCount();
+      let escrowCount;
+      try {
+        // Get total escrow count - this could potentially be expensive
+        escrowCount = await state.contract.getEscrowCount();
+      } catch (countError) {
+        console.warn("Error getting escrow count:", countError);
+        return []; // Return empty array instead of failing
+      }
       
       // Convert BigInt to Number safely for looping
       const count = Number(escrowCount);
@@ -312,7 +349,29 @@ export const useWeb3 = (contractAddress, contractAbi) => {
     }
 
     try {
-      // Optimistic UI update management could go here
+      // Check if the last argument is a transaction options object
+      const lastArg = args.length > 0 ? args[args.length - 1] : undefined;
+      const hasOptions = lastArg && typeof lastArg === 'object' && !Array.isArray(lastArg) && !ethers.isAddress(lastArg);
+      
+      // If there are transaction options, add gas estimation
+      if (hasOptions) {
+        // Remove options to estimate gas
+        const params = args.slice(0, args.length - 1);
+        try {
+          // Estimate gas for the transaction
+          const gasEstimate = await state.contract[method].estimateGas(...params, lastArg);
+          // Add 20% buffer to gas estimate
+          const gasLimit = Math.floor(Number(gasEstimate) * 1.2);
+          // Add gas limit to options
+          args[args.length - 1] = {
+            ...lastArg,
+            gasLimit
+          };
+        } catch (estError) {
+          console.warn(`Gas estimation failed for ${method}:`, estError);
+          // Continue without gas estimation if it fails
+        }
+      }
       
       // Execute transaction
       const tx = await state.contract[method](...args);
@@ -321,7 +380,6 @@ export const useWeb3 = (contractAddress, contractAbi) => {
       const receipt = await tx.wait();
       
       // Clear relevant cache entries
-      // This is a simple approach - in production you might want more targeted cache invalidation
       escrowCache.clear();
       
       return {
@@ -330,8 +388,22 @@ export const useWeb3 = (contractAddress, contractAbi) => {
         hash: tx.hash
       };
     } catch (error) {
-      console.error(`Error executing ${method}`, error);
-      throw new Error(`Failed to execute ${method}: ${error.message}`);
+      console.error(`Error executing ${method}:`, error);
+      
+      // Extract a more user-friendly error message
+      let errorMessage = error.message || 'Transaction failed';
+      
+      // Try to extract revert reason if possible
+      if (error.data) {
+        try {
+          // Sometimes the revert reason is in error.data
+          errorMessage = `Contract error: ${error.data}`;
+        } catch (e) {
+          // Continue with original error message
+        }
+      }
+      
+      throw new Error(`Failed to execute ${method}: ${errorMessage}`);
     }
   }, [state.contract]);
 

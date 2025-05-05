@@ -24,16 +24,32 @@ export const Web3Provider = ({ children }) => {
           setLoading(true);
           setError('');
           
-          // Load user's escrows
-          const userEscrows = await web3.loadUserEscrows(web3.account);
-          setEscrows(userEscrows);
+          try {
+            // Load user's escrows
+            const userEscrows = await web3.loadUserEscrows(web3.account);
+            setEscrows(userEscrows);
+          } catch (escrowError) {
+            console.error("Error loading user escrows:", escrowError);
+            setEscrows([]);
+            // Show error but continue loading arbitrated escrows
+            setError(`Error loading your escrows: ${escrowError.message}`);
+          }
           
-          // Load escrows where user is arbiter
-          const userArbitratedEscrows = await web3.loadArbitratedEscrows(web3.account);
-          setArbitratedEscrows(userArbitratedEscrows);
+          try {
+            // Load escrows where user is arbiter
+            const userArbitratedEscrows = await web3.loadArbitratedEscrows(web3.account);
+            setArbitratedEscrows(userArbitratedEscrows);
+          } catch (arbitratedError) {
+            console.error("Error loading arbitrated escrows:", arbitratedError);
+            setArbitratedEscrows([]);
+            // Show error if we haven't already shown one for user escrows
+            if (!error) {
+              setError(`Error loading arbitrated escrows: ${arbitratedError.message}`);
+            }
+          }
         } catch (error) {
-          console.error("Error loading escrows:", error);
-          setError(error.message);
+          console.error("General error loading escrows:", error);
+          setError(`Error: ${error.message}`);
         } finally {
           setLoading(false);
         }
@@ -41,7 +57,7 @@ export const Web3Provider = ({ children }) => {
     };
     
     loadEscrows();
-  }, [web3.connected, web3.account]);
+  }, [web3.connected, web3.account, web3.loadUserEscrows, web3.loadArbitratedEscrows, error]);
 
   // Execute escrow action with error handling
   const executeEscrowAction = async (action, escrowId, recipient = null) => {
@@ -78,11 +94,16 @@ export const Web3Provider = ({ children }) => {
       setSuccessMessage(`Action ${action} executed successfully! Transaction hash: ${result.hash}`);
       
       // Reload escrows after action
-      const userEscrows = await web3.loadUserEscrows(web3.account);
-      setEscrows(userEscrows);
-      
-      const userArbitratedEscrows = await web3.loadArbitratedEscrows(web3.account);
-      setArbitratedEscrows(userArbitratedEscrows);
+      try {
+        const userEscrows = await web3.loadUserEscrows(web3.account);
+        setEscrows(userEscrows);
+        
+        const userArbitratedEscrows = await web3.loadArbitratedEscrows(web3.account);
+        setArbitratedEscrows(userArbitratedEscrows);
+      } catch (loadError) {
+        console.warn("Error reloading escrows after action:", loadError);
+        // Continue without reloading if error occurs
+      }
       
       return result;
     } catch (error) {
@@ -111,8 +132,13 @@ export const Web3Provider = ({ children }) => {
       setSuccessMessage(`Escrow created successfully! Transaction hash: ${result.hash}`);
       
       // Reload escrows after creation
-      const userEscrows = await web3.loadUserEscrows(web3.account);
-      setEscrows(userEscrows);
+      try {
+        const userEscrows = await web3.loadUserEscrows(web3.account);
+        setEscrows(userEscrows);
+      } catch (loadError) {
+        console.warn("Error reloading escrows after creation:", loadError);
+        // Continue without reloading if error occurs
+      }
       
       return result;
     } catch (error) {

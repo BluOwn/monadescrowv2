@@ -7,7 +7,7 @@ export const ESCROW_SERVICE_ADDRESS = "0x44f703203A65b6b11ea3b4540cC30337F063092
 export const CREATOR_WALLET = "0x0b977acab5d9b8f654f48090955f5e00973be0fe";
 export const CREATOR_TWITTER = "@Oprimedev";
 
-// ABI for the EscrowService contract - copy your entire ABI here
+// ABI for the EscrowService contract
 export const ESCROW_SERVICE_ABI = [
 	{
 		"anonymous": false,
