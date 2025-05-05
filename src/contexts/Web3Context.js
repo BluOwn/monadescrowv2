@@ -1,4 +1,6 @@
+// src/contexts/Web3Context.js - Fixed version
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { ethers } from 'ethers'; // Added missing import
 import { useWeb3 } from '../hooks/useWeb3';
 
 // Import your contract ABI and address
