@@ -1,33 +1,390 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { ethers } from 'ethers';
 import { Button, Card, Container, Form, ListGroup, Nav, Spinner, Alert, Modal, Badge } from 'react-bootstrap';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
-import { useWeb3Context } from './contexts/Web3Context';
-import { truncateAddress } from './constants/contracts';
-import { truncateAddress, CREATOR_WALLET, CREATOR_TWITTER } from './constants/contracts';
 
+// Replace this with your deployed contract address on Monad Testnet
+const ESCROW_SERVICE_ADDRESS = "0x44f703203A65b6b11ea3b4540cC30337F0630927";
+
+// Creator Information
+const CREATOR_WALLET = "0x0b977acab5d9b8f654f48090955f5e00973be0fe";
+const CREATOR_TWITTER = "@Oprimedev";
+
+// ABI for the EscrowService contract
+const ESCROW_SERVICE_ABI = [
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "escrowId",
+				"type": "uint256"
+			},
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "initiator",
+				"type": "address"
+			}
+		],
+		"name": "DisputeRaised",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "escrowId",
+				"type": "uint256"
+			},
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "recipient",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "amount",
+				"type": "uint256"
+			}
+		],
+		"name": "DisputeResolved",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "escrowId",
+				"type": "uint256"
+			},
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "buyer",
+				"type": "address"
+			},
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "seller",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "amount",
+				"type": "uint256"
+			}
+		],
+		"name": "EscrowCreated",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "escrowId",
+				"type": "uint256"
+			},
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "buyer",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "amount",
+				"type": "uint256"
+			}
+		],
+		"name": "FundsRefunded",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "escrowId",
+				"type": "uint256"
+			},
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "seller",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "amount",
+				"type": "uint256"
+			}
+		],
+		"name": "FundsReleased",
+		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "seller",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "arbiter",
+				"type": "address"
+			}
+		],
+		"name": "createEscrow",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "payable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "escrows",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "buyer",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "seller",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "arbiter",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "amount",
+				"type": "uint256"
+			},
+			{
+				"internalType": "bool",
+				"name": "fundsDisbursed",
+				"type": "bool"
+			},
+			{
+				"internalType": "bool",
+				"name": "disputeRaised",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "escrowId",
+				"type": "uint256"
+			}
+		],
+		"name": "getEscrow",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "buyer",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "seller",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "arbiter",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "amount",
+				"type": "uint256"
+			},
+			{
+				"internalType": "bool",
+				"name": "fundsDisbursed",
+				"type": "bool"
+			},
+			{
+				"internalType": "bool",
+				"name": "disputeRaised",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "getEscrowCount",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "user",
+				"type": "address"
+			}
+		],
+		"name": "getUserEscrows",
+		"outputs": [
+			{
+				"internalType": "uint256[]",
+				"name": "",
+				"type": "uint256[]"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "escrowId",
+				"type": "uint256"
+			}
+		],
+		"name": "raiseDispute",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "escrowId",
+				"type": "uint256"
+			}
+		],
+		"name": "refundBuyer",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "escrowId",
+				"type": "uint256"
+			}
+		],
+		"name": "releaseFunds",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "escrowId",
+				"type": "uint256"
+			},
+			{
+				"internalType": "address payable",
+				"name": "recipient",
+				"type": "address"
+			}
+		],
+		"name": "resolveDispute",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "userEscrows",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	}
+];
+
+// Helper function to truncate address
+const truncateAddress = (address) => {
+  return address.slice(0, 6) + '...' + address.slice(-4);
+};
 
 function App() {
-  // Use the Web3 context
-  const {
-    account,
-    networkName,
-    connected,
-    loading,
-    connectWallet,
-    escrows,
-    arbitratedEscrows,
-    error,
-    successMessage,
-    setError,
-    setSuccessMessage,
-    executeEscrowAction,
-    createEscrow,
-    getEscrowDetails
-  } = useWeb3Context();
-
   // State variables
+  const [provider, setProvider] = useState(null);
+  const [signer, setSigner] = useState(null);
+  const [contract, setContract] = useState(null);
+  const [account, setAccount] = useState('');
+  const [networkName, setNetworkName] = useState('');
+  const [connected, setConnected] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [activeTab, setActiveTab] = useState('create');
+  const [escrows, setEscrows] = useState([]);
+  const [arbitratedEscrows, setArbitratedEscrows] = useState([]);
+  const [selectedEscrowId, setSelectedEscrowId] = useState(null);
   const [selectedEscrow, setSelectedEscrow] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
 
@@ -38,7 +395,156 @@ function App() {
   const [escrowIdToView, setEscrowIdToView] = useState('');
   const [recipientForDispute, setRecipientForDispute] = useState('');
 
-  // Handle create escrow form submission
+  // Connect to MetaMask
+  const connectWallet = async () => {
+    if (window.ethereum) {
+      try {
+        setLoading(true);
+        setError('');
+        
+        // Request account access
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        
+        if (accounts.length > 0) {
+          const provider = new ethers.BrowserProvider(window.ethereum);
+          const network = await provider.getNetwork();
+          const signer = await provider.getSigner();
+          const chainId = network.chainId;
+          
+          // Check if we're on Monad Testnet
+          if (chainId === 10143n) {
+            setProvider(provider);
+            setSigner(signer);
+            setAccount(accounts[0]);
+            setNetworkName('Monad Testnet');
+            setConnected(true);
+            
+            // Initialize contract
+            const escrowContract = new ethers.Contract(
+              ESCROW_SERVICE_ADDRESS,
+              ESCROW_SERVICE_ABI,
+              signer
+            );
+            setContract(escrowContract);
+            
+            // Load user's escrows
+            await loadUserEscrows(escrowContract, accounts[0]);
+            
+            // Load escrows where user is arbiter
+            await loadArbitratedEscrows(escrowContract, accounts[0]);
+          } else {
+            setError('Please connect to Monad Testnet');
+            try {
+              // Prompt user to switch to Monad Testnet
+              await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: '0x2797' }], // 10143 in hex
+              });
+            } catch (switchError) {
+              // If the network is not added, try to add it
+              if (switchError.code === 4902) {
+                try {
+                  await window.ethereum.request({
+                    method: 'wallet_addEthereumChain',
+                    params: [{
+                      chainId: '0x2797', // 10143 in hex
+                      chainName: 'Monad Testnet',
+                      nativeCurrency: {
+                        name: 'MON',
+                        symbol: 'MON',
+                        decimals: 18
+                      },
+                      rpcUrls: ['https://testnet-rpc.monad.xyz'],
+                      blockExplorerUrls: ['https://testnet.monadexplorer.com']
+                    }]
+                  });
+                } catch (addError) {
+                  setError('Failed to add Monad Testnet to MetaMask');
+                }
+              } else {
+                setError('Failed to switch to Monad Testnet');
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error connecting to MetaMask", error);
+        setError('Failed to connect wallet: ' + error.message);
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      setError('Please install MetaMask');
+    }
+  };
+
+  // Load user's escrows (buyer or seller)
+  const loadUserEscrows = async (escrowContract, userAddress) => {
+    try {
+      const escrowIds = await escrowContract.getUserEscrows(userAddress);
+      
+      const escrowDetails = [];
+      for (let i = 0; i < escrowIds.length; i++) {
+        const escrowId = escrowIds[i];
+        const details = await escrowContract.getEscrow(escrowId);
+        
+        escrowDetails.push({
+          id: escrowId,
+          buyer: details[0],
+          seller: details[1],
+          arbiter: details[2],
+          amount: ethers.formatEther(details[3]),
+          fundsDisbursed: details[4],
+          disputeRaised: details[5]
+        });
+      }
+      
+      setEscrows(escrowDetails);
+    } catch (error) {
+      console.error("Error loading escrows", error);
+      setError('Failed to load escrows: ' + error.message);
+    }
+  };
+  
+  // Load escrows where user is arbiter
+  const loadArbitratedEscrows = async (escrowContract, arbiterAddress) => {
+    try {
+      // Get total escrow count
+      const escrowCount = await escrowContract.getEscrowCount();
+      
+      const arbitratedEscrows = [];
+      
+      // This is a simple approach - in a production app you might want to use events or indexing
+      for (let i = 0; i < escrowCount; i++) {
+        try {
+          const details = await escrowContract.getEscrow(i);
+          
+          // Check if the user is the arbiter for this escrow
+          if (details[2].toLowerCase() === arbiterAddress.toLowerCase()) {
+            arbitratedEscrows.push({
+              id: i,
+              buyer: details[0],
+              seller: details[1],
+              arbiter: details[2],
+              amount: ethers.formatEther(details[3]),
+              fundsDisbursed: details[4],
+              disputeRaised: details[5]
+            });
+          }
+        } catch (err) {
+          // Skip any errors (e.g., if an escrow ID doesn't exist)
+          console.log(`Error fetching escrow #${i}:`, err);
+        }
+      }
+      
+      setArbitratedEscrows(arbitratedEscrows);
+    } catch (error) {
+      console.error("Error loading arbitrated escrows", error);
+      setError('Failed to load arbitrated escrows: ' + error.message);
+    }
+  };
+
+  // Create new escrow
   const handleCreateEscrow = async (e) => {
     e.preventDefault();
     
@@ -48,28 +554,113 @@ function App() {
     }
     
     try {
-      await createEscrow(sellerAddress, arbiterAddress, amount);
-      // Clear form
+      setLoading(true);
+      setError('');
+      
+      const amountInWei = ethers.parseEther(amount);
+      const tx = await contract.createEscrow(
+        sellerAddress,
+        arbiterAddress,
+        { value: amountInWei }
+      );
+      
+      await tx.wait();
+      
+      setSuccessMessage(`Escrow created successfully! Transaction hash: ${tx.hash}`);
       setSellerAddress('');
       setArbiterAddress('');
       setAmount('');
+      
+      // Reload escrows
+      await loadUserEscrows(contract, account);
     } catch (error) {
-      // Error handling is done in context
+      console.error("Error creating escrow", error);
+      setError('Failed to create escrow: ' + error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
   // View escrow details
   const viewEscrowDetails = async (escrowId) => {
     try {
-      const escrow = await getEscrowDetails(escrowId);
+      setLoading(true);
+      setError('');
+      
+      const details = await contract.getEscrow(escrowId);
+      const escrow = {
+        id: escrowId,
+        buyer: details[0],
+        seller: details[1],
+        arbiter: details[2],
+        amount: ethers.formatEther(details[3]),
+        fundsDisbursed: details[4],
+        disputeRaised: details[5]
+      };
+      
       setSelectedEscrow(escrow);
       setShowDetailsModal(true);
     } catch (error) {
-      // Error handling is done in context
+      console.error("Error viewing escrow", error);
+      setError('Failed to view escrow: ' + error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Handle find escrow form submission
+  // Handle action on escrow
+  const handleEscrowAction = async (action, escrowId, recipient = null) => {
+    try {
+      setLoading(true);
+      setError('');
+      
+      let tx;
+      
+      switch (action) {
+        case 'release':
+          tx = await contract.releaseFunds(escrowId);
+          break;
+        case 'refund':
+          tx = await contract.refundBuyer(escrowId);
+          break;
+        case 'dispute':
+          tx = await contract.raiseDispute(escrowId);
+          break;
+        case 'resolve':
+          if (!recipient) {
+            setError('Recipient address is required to resolve a dispute');
+            setLoading(false);
+            return;
+          }
+          tx = await contract.resolveDispute(escrowId, recipient);
+          break;
+        default:
+          setError('Invalid action');
+          setLoading(false);
+          return;
+      }
+      
+      await tx.wait();
+      
+      setSuccessMessage(`Action ${action} executed successfully! Transaction hash: ${tx.hash}`);
+      
+      // Reload escrows
+      await loadUserEscrows(contract, account);
+      await loadArbitratedEscrows(contract, account);
+      
+      // If we were showing a modal for this escrow, refresh its details
+      if (selectedEscrow && selectedEscrow.id === escrowId) {
+        viewEscrowDetails(escrowId);
+      }
+    } catch (error) {
+      console.error(`Error executing ${action}`, error);
+      setError(`Failed to execute ${action}: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Find escrow by ID
   const handleFindEscrow = async (e) => {
     e.preventDefault();
     
@@ -82,31 +673,44 @@ function App() {
       await viewEscrowDetails(escrowIdToView);
       setEscrowIdToView('');
     } catch (error) {
-      // Error handling is done in context
+      console.error("Error finding escrow", error);
+      setError('Failed to find escrow: ' + error.message);
     }
   };
 
-  // Handle action on escrow (release, refund, dispute, resolve)
-  const handleEscrowAction = async (action, escrowId, recipient = null) => {
-    try {
-      await executeEscrowAction(action, escrowId, recipient);
+  // Effect for handling account changes
+  useEffect(() => {
+    if (window.ethereum) {
+      const handleAccountsChanged = (accounts) => {
+        if (accounts.length > 0) {
+          setAccount(accounts[0]);
+          if (contract) {
+            loadUserEscrows(contract, accounts[0]);
+            loadArbitratedEscrows(contract, accounts[0]);
+          }
+        } else {
+          setConnected(false);
+          setAccount('');
+        }
+      };
       
-      // If we were showing a modal for this escrow, refresh its details
-      if (selectedEscrow && selectedEscrow.id === escrowId) {
-        viewEscrowDetails(escrowId);
-      }
-    } catch (error) {
-      // Error handling is done in context
+      const handleChainChanged = () => {
+        window.location.reload();
+      };
+      
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
+      window.ethereum.on('chainChanged', handleChainChanged);
+      
+      return () => {
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+        window.ethereum.removeListener('chainChanged', handleChainChanged);
+      };
     }
-  };
+  }, [contract]);
 
   return (
     <div className="app-wrapper">
       <Container className="py-5">
-        {/* Keep the rest of your UI code the same, but replace direct function calls */}
-        {/* For example, replace the old connectWallet with the new one from context */}
-        {/* The UI structure should remain the same */}
-        
         <div className="app-header">
           <h1>Monad Escrow Service</h1>
           <p>Secure your transactions with smart contract escrow on Monad Testnet</p>
@@ -167,7 +771,6 @@ function App() {
               </Nav.Item>
             </Nav>
             
-            {/* Create Escrow Tab */}
             {activeTab === 'create' && (
               <Card>
                 <Card.Body>
@@ -227,7 +830,6 @@ function App() {
               </Card>
             )}
             
-            {/* My Escrows Tab */}
             {activeTab === 'my' && (
               <Card>
                 <Card.Body>
@@ -286,7 +888,6 @@ function App() {
               </Card>
             )}
 
-            {/* Arbitrated Escrows Tab */}
             {activeTab === 'arbitrated' && (
               <Card>
                 <Card.Body>
@@ -353,7 +954,6 @@ function App() {
               </Card>
             )}
             
-            {/* Find Escrow Tab */}
             {activeTab === 'find' && (
               <Card>
                 <Card.Body>
@@ -541,30 +1141,31 @@ function App() {
               </Modal.Footer>
             </Modal>
             
-{/* Footer with creator info */}
-<div className="footer">
-  <p>
-    Created by <a href={`https://twitter.com/${CREATOR_TWITTER.substring(1)}`} target="_blank" rel="noopener noreferrer">{CREATOR_TWITTER}</a>
-  </p>
-  <p>
-    Creator wallet:{" "}
-    <a
-      href={`https://testnet.monadexplorer.com/address/${CREATOR_WALLET}`}
-      onClick={(e) => {
-        e.preventDefault(); // prevent default to control the behavior
-        navigator.clipboard.writeText(CREATOR_WALLET); // copy to clipboard
-        window.open(e.currentTarget.href, "_blank"); // open in new tab
-      }}
-      style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
-      title="Click to open and copy"
-    >
-      {CREATOR_WALLET}
-    </a>
-  </p>
-  <p>
-    <a href="https://github.com/BluOwn/monadescrow" target="_blank" rel="noopener noreferrer">View on GitHub</a>
-  </p>
-</div>
+            {/* Footer with creator info */}
+            <div className="footer">
+              <p>
+                Created by <a href={`https://twitter.com/${CREATOR_TWITTER.substring(1)}`} target="_blank" rel="noopener noreferrer">{CREATOR_TWITTER}</a>
+              </p>
+              <p>
+  Creator wallet:{" "}
+  <a
+    href={`https://testnet.monadexplorer.com/address/${CREATOR_WALLET}`}
+    onClick={(e) => {
+      e.preventDefault(); // prevent default to control the behavior
+      navigator.clipboard.writeText(CREATOR_WALLET); // copy to clipboard
+      window.open(e.currentTarget.href, "_blank"); // open in new tab
+    }}
+    style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
+    title="Click to open and copy"
+  >
+    {CREATOR_WALLET}
+  </a>
+</p>
+
+              <p>
+                <a href="https://github.com/BluOwn/monadescrow" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+              </p>
+            </div>
           </>
         )}
       </Container>
