@@ -222,14 +222,17 @@ export const useWeb3 = (contractAddress, contractAbi) => {
       // In production, consider using events or indexing
       const escrowCount = await state.contract.getEscrowCount();
       
+      // Convert BigInt to Number safely for looping
+      const count = Number(escrowCount);
+      
       const arbitratedEscrows = [];
       const batchSize = 10; // Process in smaller batches to avoid timeouts
       
-      for (let i = 0; i < escrowCount; i += batchSize) {
+      for (let i = 0; i < count; i += batchSize) {
         const promises = [];
         
         // Create batch of promises
-        for (let j = i; j < Math.min(i + batchSize, escrowCount); j++) {
+        for (let j = i; j < Math.min(i + batchSize, count); j++) {
           promises.push(
             state.contract.getEscrow(j)
               .then(details => {

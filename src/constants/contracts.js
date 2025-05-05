@@ -1,3 +1,5 @@
+import { ethers } from 'ethers';
+
 // Replace this with your deployed contract address on Monad Testnet
 export const ESCROW_SERVICE_ADDRESS = "0x44f703203A65b6b11ea3b4540cC30337F0630927";
 
@@ -5,7 +7,7 @@ export const ESCROW_SERVICE_ADDRESS = "0x44f703203A65b6b11ea3b4540cC30337F063092
 export const CREATOR_WALLET = "0x0b977acab5d9b8f654f48090955f5e00973be0fe";
 export const CREATOR_TWITTER = "@Oprimedev";
 
-// ABI for the EscrowService contract
+// ABI for the EscrowService contract - copy your entire ABI here
 export const ESCROW_SERVICE_ABI = [
 	{
 		"anonymous": false,
@@ -362,4 +364,10 @@ export const ESCROW_SERVICE_ABI = [
 // Helper function to truncate address
 export const truncateAddress = (address) => {
   return address.slice(0, 6) + '...' + address.slice(-4);
+};
+
+// Helper for formatting BigInt values safely
+export const safeFormatEther = (value) => {
+  if (value === undefined || value === null) return '0';
+  return ethers.formatEther(value);
 };
