@@ -4,6 +4,8 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
 import { useWeb3Context } from './contexts/Web3Context';
 import { truncateAddress } from './constants/contracts';
+import { truncateAddress, CREATOR_WALLET, CREATOR_TWITTER } from './constants/contracts';
+
 
 function App() {
   // Use the Web3 context
