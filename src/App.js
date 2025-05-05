@@ -371,140 +371,110 @@ const truncateAddress = (address) => {
 };
 
 function App() {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [selectedEscrow, setSelectedEscrow] = useState(null);
-  const [activeTab, setActiveTab] = useState('myEscrows');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filteredEscrows, setFilteredEscrows] = useState([]);
-  const [userRole, setUserRole] = useState(null);
-  const [walletAddress, setWalletAddress] = useState(null);
-  const [network, setNetwork] = useState(null);
+  // State variables
+  const [provider, setProvider] = useState(null);
+  const [signer, setSigner] = useState(null);
+  const [contract, setContract] = useState(null);
+  const [account, setAccount] = useState('');
+  const [networkName, setNetworkName] = useState('');
+  const [connected, setConnected] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [activeTab, setActiveTab] = useState('create');
   const [escrows, setEscrows] = useState([]);
   const [arbitratedEscrows, setArbitratedEscrows] = useState([]);
-  const [newEscrow, setNewEscrow] = useState({
-    sellerAddress: '',
-    amount: '',
-    description: '',
-    arbiterAddress: ''
-  });
+  const [selectedEscrowId, setSelectedEscrowId] = useState(null);
+  const [selectedEscrow, setSelectedEscrow] = useState(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
 
-  useEffect(() => {
-    const init = async () => {
+  // Form states
+  const [sellerAddress, setSellerAddress] = useState('');
+  const [arbiterAddress, setArbiterAddress] = useState('');
+  const [amount, setAmount] = useState('');
+  const [escrowIdToView, setEscrowIdToView] = useState('');
+  const [recipientForDispute, setRecipientForDispute] = useState('');
+
+  // Connect to MetaMask
+  const connectWallet = async () => {
+    if (window.ethereum) {
       try {
         setLoading(true);
-        if (window.ethereum) {
-          const provider = new ethers.providers.Web3Provider(window.ethereum);
-          const accounts = await provider.listAccounts();
-          if (accounts.length > 0) {
-            await connectWallet();
+        setError('');
+        
+        // Request account access
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        
+        if (accounts.length > 0) {
+          const provider = new ethers.BrowserProvider(window.ethereum);
+          const network = await provider.getNetwork();
+          const signer = await provider.getSigner();
+          const chainId = network.chainId;
+          
+          // Check if we're on Monad Testnet
+          if (chainId === 10143n) {
+            setProvider(provider);
+            setSigner(signer);
+            setAccount(accounts[0]);
+            setNetworkName('Monad Testnet');
+            setConnected(true);
+            
+            // Initialize contract
+            const escrowContract = new ethers.Contract(
+              ESCROW_SERVICE_ADDRESS,
+              ESCROW_SERVICE_ABI,
+              signer
+            );
+            setContract(escrowContract);
+            
+            // Load user's escrows
+            await loadUserEscrows(escrowContract, accounts[0]);
+            
+            // Load escrows where user is arbiter
+            await loadArbitratedEscrows(escrowContract, accounts[0]);
+          } else {
+            setError('Please connect to Monad Testnet');
+            try {
+              // Prompt user to switch to Monad Testnet
+              await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: '0x2797' }], // 10143 in hex
+              });
+            } catch (switchError) {
+              // If the network is not added, try to add it
+              if (switchError.code === 4902) {
+                try {
+                  await window.ethereum.request({
+                    method: 'wallet_addEthereumChain',
+                    params: [{
+                      chainId: '0x2797', // 10143 in hex
+                      chainName: 'Monad Testnet',
+                      nativeCurrency: {
+                        name: 'MON',
+                        symbol: 'MON',
+                        decimals: 18
+                      },
+                      rpcUrls: ['https://testnet-rpc.monad.xyz'],
+                      blockExplorerUrls: ['https://testnet.monadexplorer.com']
+                    }]
+                  });
+                } catch (addError) {
+                  setError('Failed to add Monad Testnet to MetaMask');
+                }
+              } else {
+                setError('Failed to switch to Monad Testnet');
+              }
+            }
           }
         }
-      } catch (err) {
-        setError('Failed to initialize wallet connection');
-        console.error(err);
+      } catch (error) {
+        console.error("Error connecting to MetaMask", error);
+        setError('Failed to connect wallet: ' + error.message);
       } finally {
         setLoading(false);
       }
-    };
-
-    init();
-  }, []);
-
-  useEffect(() => {
-    if (searchQuery) {
-      const filtered = escrows.filter(escrow => 
-        escrow.id.toString().includes(searchQuery) ||
-        escrow.seller.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        escrow.buyer.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-      setFilteredEscrows(filtered);
     } else {
-      setFilteredEscrows(escrows);
-    }
-  }, [searchQuery, escrows]);
-
-  const connectWallet = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      if (!window.ethereum) {
-        throw new Error('Please install MetaMask to use this application');
-      }
-
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      await provider.send("eth_requestAccounts", []);
-      const signer = provider.getSigner();
-      const address = await signer.getAddress();
-      const network = await provider.getNetwork();
-
-      setWalletAddress(address);
-      setNetwork(network.name);
-
-      const escrowContract = new ethers.Contract(
-        ESCROW_SERVICE_ADDRESS,
-        ESCROW_SERVICE_ABI,
-        signer
-      );
-
-      await loadUserEscrows(escrowContract, address);
-      await loadArbitratedEscrows(escrowContract, address);
-
-      window.ethereum.on('accountsChanged', handleAccountsChanged);
-      window.ethereum.on('chainChanged', handleChainChanged);
-    } catch (err) {
-      setError(err.message);
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCreateEscrow = async (e) => {
-    e.preventDefault();
-    try {
-      setLoading(true);
-      setError(null);
-      setSuccess(null);
-
-      if (!window.ethereum) {
-        throw new Error('Please install MetaMask to use this application');
-      }
-
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const signer = provider.getSigner();
-      const escrowContract = new ethers.Contract(
-        ESCROW_SERVICE_ADDRESS,
-        ESCROW_SERVICE_ABI,
-        signer
-      );
-
-      const amountInWei = ethers.utils.parseEther(newEscrow.amount);
-      const tx = await escrowContract.createEscrow(
-        newEscrow.sellerAddress,
-        newEscrow.arbiterAddress,
-        { value: amountInWei }
-      );
-
-      await tx.wait();
-      setSuccess('Escrow created successfully!');
-      setShowCreateModal(false);
-      setNewEscrow({
-        sellerAddress: '',
-        amount: '',
-        description: '',
-        arbiterAddress: ''
-      });
-
-      await loadUserEscrows(escrowContract, walletAddress);
-    } catch (err) {
-      setError(err.message);
-      console.error(err);
-    } finally {
-      setLoading(false);
+      setError('Please install MetaMask');
     }
   };
 
@@ -571,6 +541,43 @@ function App() {
     } catch (error) {
       console.error("Error loading arbitrated escrows", error);
       setError('Failed to load arbitrated escrows: ' + error.message);
+    }
+  };
+
+  // Create new escrow
+  const handleCreateEscrow = async (e) => {
+    e.preventDefault();
+    
+    if (!sellerAddress || !arbiterAddress || !amount) {
+      setError('Please fill out all fields');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      setError('');
+      
+      const amountInWei = ethers.parseEther(amount);
+      const tx = await contract.createEscrow(
+        sellerAddress,
+        arbiterAddress,
+        { value: amountInWei }
+      );
+      
+      await tx.wait();
+      
+      setSuccessMessage(`Escrow created successfully! Transaction hash: ${tx.hash}`);
+      setSellerAddress('');
+      setArbiterAddress('');
+      setAmount('');
+      
+      // Reload escrows
+      await loadUserEscrows(contract, account);
+    } catch (error) {
+      console.error("Error creating escrow", error);
+      setError('Failed to create escrow: ' + error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -702,349 +709,466 @@ function App() {
   }, [contract]);
 
   return (
-    <div className="App">
-      <Container>
+    <div className="app-wrapper">
+      <Container className="py-5">
         <div className="app-header">
           <h1>Monad Escrow Service</h1>
-          <p>A secure and decentralized escrow service built on Monad</p>
+          <p>Secure your transactions with smart contract escrow on Monad Testnet</p>
         </div>
-
-        {error && (
-          <Alert variant="danger" onClose={() => setError(null)} dismissible>
-            {error}
-          </Alert>
-        )}
-
-        {success && (
-          <Alert variant="success" onClose={() => setSuccess(null)} dismissible>
-            {success}
-          </Alert>
-        )}
-
-        {!walletAddress ? (
-          <Card className="text-center">
-            <Card.Body>
-              <h5 className="card-title">Connect Your Wallet</h5>
-              <p className="text-muted">Please connect your wallet to use the escrow service</p>
-              <Button
-                variant="primary"
-                onClick={connectWallet}
-                disabled={loading}
-              >
-                {loading ? (
-                  <>
-                    <Spinner
-                      as="span"
-                      animation="border"
-                      size="sm"
-                      role="status"
-                      aria-hidden="true"
-                      className="me-2"
-                    />
-                    Connecting...
-                  </>
-                ) : (
-                  'Connect Wallet'
-                )}
-              </Button>
-            </Card.Body>
-          </Card>
+        
+        {!connected ? (
+          <div className="connect-wallet-container">
+            <p>Connect your wallet to use the escrow service</p>
+            <Button 
+              className="wallet-button"
+              onClick={connectWallet} 
+              disabled={loading}
+            >
+              {loading ? <Spinner animation="border" size="sm" /> : 'Connect Wallet'}
+            </Button>
+          </div>
         ) : (
           <>
-            <Card className="mb-4">
-              <Card.Body>
-                <div className="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h6 className="mb-1">Connected Wallet</h6>
-                    <p className="text-muted mb-0">{truncateAddress(walletAddress)}</p>
-                  </div>
-                  <Badge bg="info" className="network-badge">
-                    {network}
-                  </Badge>
-                </div>
-              </Card.Body>
-            </Card>
-
-            <Card className="mb-4">
-              <Card.Body>
-                <div className="d-flex justify-content-between align-items-center mb-3">
-                  <h5 className="mb-0">Escrow Transactions</h5>
-                  <Button
-                    variant="primary"
-                    onClick={() => setShowCreateModal(true)}
-                  >
-                    Create New Escrow
-                  </Button>
-                </div>
-
-                <Form className="mb-3">
-                  <Form.Control
-                    type="text"
-                    placeholder="Search by ID, seller, or buyer"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </Form>
-
-                <Nav variant="tabs" className="mb-3">
-                  <Nav.Item>
-                    <Nav.Link
-                      active={activeTab === 'myEscrows'}
-                      onClick={() => setActiveTab('myEscrows')}
+            <div className="wallet-info mb-4">
+              <div>
+                <small>Connected to: <span className="network-badge">{networkName}</span></small>
+                <p className="mb-0"><strong>Account:</strong> {truncateAddress(account)}</p>
+              </div>
+              <Button variant="outline-secondary" size="sm" onClick={() => window.location.reload()}>
+                Disconnect
+              </Button>
+            </div>
+            
+            {error && (
+              <Alert variant="danger" onClose={() => setError('')} dismissible>
+                {error}
+              </Alert>
+            )}
+            
+            {successMessage && (
+              <Alert variant="success" onClose={() => setSuccessMessage('')} dismissible>
+                {successMessage}
+              </Alert>
+            )}
+            
+            <Nav variant="tabs" className="mb-4" activeKey={activeTab} onSelect={(k) => setActiveTab(k)}>
+              <Nav.Item>
+                <Nav.Link eventKey="create">Create Escrow</Nav.Link>
+              </Nav.Item>
+              <Nav.Item>
+                <Nav.Link eventKey="my">My Escrows</Nav.Link>
+              </Nav.Item>
+              <Nav.Item>
+                <Nav.Link eventKey="arbitrated">
+                  Arbitrated Escrows
+                  {arbitratedEscrows.length > 0 && (
+                    <Badge bg="primary" className="ms-2">{arbitratedEscrows.length}</Badge>
+                  )}
+                </Nav.Link>
+              </Nav.Item>
+              <Nav.Item>
+                <Nav.Link eventKey="find">Find Escrow</Nav.Link>
+              </Nav.Item>
+            </Nav>
+            
+            {activeTab === 'create' && (
+              <Card>
+                <Card.Body>
+                  <Card.Title>Create New Escrow</Card.Title>
+                  <Form onSubmit={handleCreateEscrow}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Seller Address</Form.Label>
+                      <Form.Control
+                        type="text"
+                        placeholder="0x..."
+                        value={sellerAddress}
+                        onChange={(e) => setSellerAddress(e.target.value)}
+                        required
+                      />
+                      <Form.Text className="text-muted">
+                        The address of the party who will receive the funds
+                      </Form.Text>
+                    </Form.Group>
+                    
+                    <Form.Group className="mb-3">
+                      <Form.Label>Arbiter Address</Form.Label>
+                      <Form.Control
+                        type="text"
+                        placeholder="0x..."
+                        value={arbiterAddress}
+                        onChange={(e) => setArbiterAddress(e.target.value)}
+                        required
+                      />
+                      <Form.Text className="text-muted">
+                        A trusted third party who can resolve disputes and refund funds if needed
+                      </Form.Text>
+                    </Form.Group>
+                    
+                    <Form.Group className="mb-3">
+                      <Form.Label>Amount (MON)</Form.Label>
+                      <Form.Control
+                        type="text"
+                        placeholder="0.01"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        required
+                      />
+                      <Form.Text className="text-muted">
+                        The amount to place in escrow
+                      </Form.Text>
+                    </Form.Group>
+                    
+                    <Button 
+                      variant="primary" 
+                      type="submit" 
+                      disabled={loading}
                     >
-                      My Escrows
-                    </Nav.Link>
-                  </Nav.Item>
-                  <Nav.Item>
-                    <Nav.Link
-                      active={activeTab === 'arbitrated'}
-                      onClick={() => setActiveTab('arbitrated')}
-                    >
-                      Arbitrated Escrows
-                    </Nav.Link>
-                  </Nav.Item>
-                </Nav>
-
-                {loading ? (
-                  <div className="loading-spinner">
-                    <Spinner animation="border" role="status">
-                      <span className="visually-hidden">Loading...</span>
-                    </Spinner>
-                  </div>
-                ) : (
-                  <ListGroup>
-                    {(activeTab === 'myEscrows' ? filteredEscrows : arbitratedEscrows).map((escrow) => (
-                      <ListGroup.Item
-                        key={escrow.id}
-                        className="escrow-item"
-                        onClick={() => viewEscrowDetails(escrow.id)}
-                      >
-                        <div className="d-flex justify-content-between align-items-center w-100">
-                          <div>
-                            <h6 className="mb-1">Escrow #{escrow.id}</h6>
+                      {loading ? <Spinner animation="border" size="sm" /> : 'Create Escrow'}
+                    </Button>
+                  </Form>
+                </Card.Body>
+              </Card>
+            )}
+            
+            {activeTab === 'my' && (
+              <Card>
+                <Card.Body>
+                  <Card.Title>My Escrows</Card.Title>
+                  {escrows.length === 0 ? (
+                    <p className="text-center my-4">You don't have any escrows yet</p>
+                  ) : (
+                    <ListGroup>
+                      {escrows.map((escrow) => (
+                        <ListGroup.Item 
+                          key={escrow.id.toString()} 
+                          className="escrow-item"
+                        >
+                          <div className="escrow-info">
+                            <strong>Escrow #{escrow.id.toString()}</strong>
+                            <p className="mb-0">Amount: {escrow.amount} MON</p>
                             <div className="escrow-roles">
-                              <span className="role-badge buyer-badge">Buyer: {truncateAddress(escrow.buyer)}</span>
-                              <span className="role-badge seller-badge">Seller: {truncateAddress(escrow.seller)}</span>
-                              {escrow.arbiter && (
-                                <span className="role-badge arbiter-badge">Arbiter: {truncateAddress(escrow.arbiter)}</span>
+                              {account.toLowerCase() === escrow.buyer.toLowerCase() && (
+                                <span className="role-badge buyer-badge">Buyer</span>
+                              )}
+                              {account.toLowerCase() === escrow.seller.toLowerCase() && (
+                                <span className="role-badge seller-badge">Seller</span>
+                              )}
+                              {account.toLowerCase() === escrow.arbiter.toLowerCase() && (
+                                <span className="role-badge arbiter-badge">Arbiter</span>
                               )}
                             </div>
+                            <span 
+                              className={`escrow-status ${
+                                escrow.fundsDisbursed 
+                                  ? 'status-completed' 
+                                  : escrow.disputeRaised 
+                                    ? 'status-disputed' 
+                                    : 'status-active'
+                              }`}
+                            >
+                              {escrow.fundsDisbursed 
+                                ? 'Completed' 
+                                : escrow.disputeRaised 
+                                  ? 'Disputed' 
+                                  : 'Active'}
+                            </span>
                           </div>
-                          <div className="text-end">
-                            <div className="escrow-status status-active">
-                              {ethers.utils.formatEther(escrow.amount)} MONAD
+                          <Button 
+                            variant="outline-info" 
+                            size="sm"
+                            onClick={() => viewEscrowDetails(escrow.id)}
+                          >
+                            View Details
+                          </Button>
+                        </ListGroup.Item>
+                      ))}
+                    </ListGroup>
+                  )}
+                </Card.Body>
+              </Card>
+            )}
+
+            {activeTab === 'arbitrated' && (
+              <Card>
+                <Card.Body>
+                  <Card.Title>Escrows You're Arbitrating</Card.Title>
+                  {arbitratedEscrows.length === 0 ? (
+                    <p className="text-center my-4">You're not arbitrating any escrows yet</p>
+                  ) : (
+                    <ListGroup>
+                      {arbitratedEscrows.map((escrow) => (
+                        <ListGroup.Item 
+                          key={escrow.id.toString()} 
+                          className="escrow-item arbiter-item"
+                        >
+                          <div className="escrow-info">
+                            <div className="d-flex align-items-center">
+                              <strong>Escrow #{escrow.id.toString()}</strong>
+                              <span className="role-badge arbiter-badge ms-2">You are the Arbiter</span>
                             </div>
-                            <div className={`escrow-status ${getStatusClass(escrow.status)}`}>
-                              {getStatusText(escrow.status)}
-                            </div>
+                            <p className="mb-1">Amount: {escrow.amount} MON</p>
+                            <p className="mb-1">Buyer: {truncateAddress(escrow.buyer)}</p>
+                            <p className="mb-1">Seller: {truncateAddress(escrow.seller)}</p>
+                            <span 
+                              className={`escrow-status ${
+                                escrow.fundsDisbursed 
+                                  ? 'status-completed' 
+                                  : escrow.disputeRaised 
+                                    ? 'status-disputed' 
+                                    : 'status-active'
+                              }`}
+                            >
+                              {escrow.fundsDisbursed 
+                                ? 'Completed' 
+                                : escrow.disputeRaised 
+                                  ? 'Disputed' 
+                                  : 'Active'}
+                            </span>
                           </div>
+                          <div className="d-flex flex-column">
+                            <Button 
+                              variant="outline-info" 
+                              size="sm"
+                              className="mb-2"
+                              onClick={() => viewEscrowDetails(escrow.id)}
+                            >
+                              View Details
+                            </Button>
+                            
+                            {!escrow.fundsDisbursed && !escrow.disputeRaised && (
+                              <Button 
+                                variant="outline-warning" 
+                                size="sm"
+                                onClick={() => handleEscrowAction('refund', escrow.id)}
+                                disabled={loading}
+                              >
+                                Refund Buyer
+                              </Button>
+                            )}
+                          </div>
+                        </ListGroup.Item>
+                      ))}
+                    </ListGroup>
+                  )}
+                </Card.Body>
+              </Card>
+            )}
+            
+            {activeTab === 'find' && (
+              <Card>
+                <Card.Body>
+                  <Card.Title>Find Escrow by ID</Card.Title>
+                  <Form onSubmit={handleFindEscrow} className="mb-4">
+                    <Form.Group className="mb-3">
+                      <Form.Label>Escrow ID</Form.Label>
+                      <Form.Control
+                        type="text"
+                        placeholder="Enter escrow ID"
+                        value={escrowIdToView}
+                        onChange={(e) => setEscrowIdToView(e.target.value)}
+                        required
+                      />
+                    </Form.Group>
+                    
+                    <Button 
+                      variant="primary" 
+                      type="submit" 
+                      disabled={loading}
+                    >
+                      {loading ? <Spinner animation="border" size="sm" /> : 'Find Escrow'}
+                    </Button>
+                  </Form>
+                </Card.Body>
+              </Card>
+            )}
+            
+            {/* Escrow Details Modal */}
+            <Modal show={showDetailsModal} onHide={() => setShowDetailsModal(false)}>
+              <Modal.Header closeButton>
+                <Modal.Title>Escrow Details</Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                {selectedEscrow && (
+                  <>
+                    <p><strong>Escrow ID:</strong> {selectedEscrow.id.toString()}</p>
+                    
+                    <div className="user-role-section mb-3">
+                      {account.toLowerCase() === selectedEscrow.buyer.toLowerCase() && (
+                        <div className="user-role-indicator">
+                          <span className="role-badge buyer-badge">You are the Buyer</span>
                         </div>
-                      </ListGroup.Item>
-                    ))}
-                  </ListGroup>
+                      )}
+                      {account.toLowerCase() === selectedEscrow.seller.toLowerCase() && (
+                        <div className="user-role-indicator">
+                          <span className="role-badge seller-badge">You are the Seller</span>
+                        </div>
+                      )}
+                      {account.toLowerCase() === selectedEscrow.arbiter.toLowerCase() && (
+                        <div className="user-role-indicator">
+                          <span className="role-badge arbiter-badge">You are the Arbiter</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <p><strong>Buyer:</strong> <span className="address-display">{selectedEscrow.buyer}</span></p>
+                    <p><strong>Seller:</strong> <span className="address-display">{selectedEscrow.seller}</span></p>
+                    <p><strong>Arbiter:</strong> <span className="address-display">{selectedEscrow.arbiter}</span></p>
+                    <p><strong>Amount:</strong> {selectedEscrow.amount} MON</p>
+                    <p>
+                      <strong>Status:</strong>{' '}
+                      <span 
+                        className={`escrow-status ${
+                          selectedEscrow.fundsDisbursed 
+                            ? 'status-completed' 
+                            : selectedEscrow.disputeRaised 
+                              ? 'status-disputed' 
+                              : 'status-active'
+                        }`}
+                      >
+                        {selectedEscrow.fundsDisbursed 
+                          ? 'Completed' 
+                          : selectedEscrow.disputeRaised 
+                            ? 'Disputed' 
+                            : 'Active'}
+                      </span>
+                    </p>
+                    
+                    {!selectedEscrow.fundsDisbursed && (
+                      <div className="mt-4">
+                        <h6>Available Actions</h6>
+                        
+                        {/* Buyer Actions */}
+                        {account.toLowerCase() === selectedEscrow.buyer.toLowerCase() && 
+                         !selectedEscrow.disputeRaised && (
+                          <Button 
+                            variant="success" 
+                            size="sm" 
+                            className="me-2 mb-2" 
+                            onClick={() => handleEscrowAction('release', selectedEscrow.id)}
+                            disabled={loading}
+                          >
+                            Release Funds to Seller
+                          </Button>
+                        )}
+                        
+                        {/* Seller Actions */}
+                        {account.toLowerCase() === selectedEscrow.seller.toLowerCase() && 
+                         !selectedEscrow.disputeRaised && (
+                          <Button 
+                            variant="warning" 
+                            size="sm" 
+                            className="me-2 mb-2" 
+                            onClick={() => handleEscrowAction('refund', selectedEscrow.id)}
+                            disabled={loading}
+                          >
+                            Refund Buyer
+                          </Button>
+                        )}
+                        
+                        {/* Dispute Actions (Buyer or Seller) */}
+                        {(account.toLowerCase() === selectedEscrow.buyer.toLowerCase() || 
+                          account.toLowerCase() === selectedEscrow.seller.toLowerCase()) && 
+                          !selectedEscrow.disputeRaised && (
+                          <Button 
+                            variant="danger" 
+                            size="sm" 
+                            className="me-2 mb-2" 
+                            onClick={() => handleEscrowAction('dispute', selectedEscrow.id)}
+                            disabled={loading}
+                          >
+                            Raise Dispute
+                          </Button>
+                        )}
+                        
+                        {/* Arbiter Actions */}
+                        {account.toLowerCase() === selectedEscrow.arbiter.toLowerCase() && (
+                          <div className="arbiter-actions mt-3">
+                            <div className="arbiter-notice mb-3">
+                              <Alert variant="info">
+                                <strong>Arbiter Controls</strong>
+                                <p className="mb-0">As the arbiter, you can resolve disputes or refund the buyer if needed.</p>
+                              </Alert>
+                            </div>
+                            
+                            {/* Refund Button (always available to arbiter) */}
+                            {!selectedEscrow.disputeRaised && !selectedEscrow.fundsDisbursed && (
+                              <Button 
+                                variant="warning" 
+                                size="sm" 
+                                className="me-2 mb-2" 
+                                onClick={() => handleEscrowAction('refund', selectedEscrow.id)}
+                                disabled={loading}
+                              >
+                                Refund Buyer
+                              </Button>
+                            )}
+                            
+                            {/* Dispute Resolution (only if dispute raised) */}
+                            {selectedEscrow.disputeRaised && (
+                              <div>
+                                <Form.Group className="mb-2">
+                                  <Form.Label>Resolve dispute in favor of:</Form.Label>
+                                  <Form.Select 
+                                    onChange={(e) => setRecipientForDispute(e.target.value)}
+                                    className="mb-2"
+                                  >
+                                    <option value="">Select recipient</option>
+                                    <option value={selectedEscrow.buyer}>Buyer</option>
+                                    <option value={selectedEscrow.seller}>Seller</option>
+                                  </Form.Select>
+                                </Form.Group>
+                                
+                                <Button 
+                                  variant="primary" 
+                                  size="sm" 
+                                  onClick={() => handleEscrowAction('resolve', selectedEscrow.id, recipientForDispute)}
+                                  disabled={loading || !recipientForDispute}
+                                >Resolve Dispute
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
-              </Card.Body>
-            </Card>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button variant="secondary" onClick={() => setShowDetailsModal(false)}>
+                  Close
+                </Button>
+              </Modal.Footer>
+            </Modal>
+            
+            {/* Footer with creator info */}
+            <div className="footer">
+              <p>
+                Created by <a href={`https://twitter.com/${CREATOR_TWITTER.substring(1)}`} target="_blank" rel="noopener noreferrer">{CREATOR_TWITTER}</a>
+              </p>
+              <p>
+  Creator wallet:{" "}
+  <a
+    href={`https://testnet.monadexplorer.com/address/${CREATOR_WALLET}`}
+    onClick={(e) => {
+      e.preventDefault(); // prevent default to control the behavior
+      navigator.clipboard.writeText(CREATOR_WALLET); // copy to clipboard
+      window.open(e.currentTarget.href, "_blank"); // open in new tab
+    }}
+    style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
+    title="Click to open and copy"
+  >
+    {CREATOR_WALLET}
+  </a>
+</p>
+
+              <p>
+                <a href="https://github.com/BluOwn/monadescrow" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+              </p>
+            </div>
           </>
         )}
       </Container>
-
-      {/* Create Escrow Modal */}
-      <Modal show={showCreateModal} onHide={() => setShowCreateModal(false)}>
-        <Modal.Header closeButton>
-          <Modal.Title>Create New Escrow</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <Form onSubmit={handleCreateEscrow}>
-            <Form.Group className="mb-3">
-              <Form.Label>Seller Address</Form.Label>
-              <Form.Control
-                type="text"
-                placeholder="Enter seller's wallet address"
-                value={newEscrow.sellerAddress}
-                onChange={(e) => setNewEscrow({ ...newEscrow, sellerAddress: e.target.value })}
-                required
-              />
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Label>Amount (MONAD)</Form.Label>
-              <Form.Control
-                type="number"
-                placeholder="Enter amount in MONAD"
-                value={newEscrow.amount}
-                onChange={(e) => setNewEscrow({ ...newEscrow, amount: e.target.value })}
-                required
-                min="0"
-                step="0.000000000000000001"
-              />
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Label>Arbiter Address (Optional)</Form.Label>
-              <Form.Control
-                type="text"
-                placeholder="Enter arbiter's wallet address"
-                value={newEscrow.arbiterAddress}
-                onChange={(e) => setNewEscrow({ ...newEscrow, arbiterAddress: e.target.value })}
-              />
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Label>Description (Optional)</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={3}
-                placeholder="Enter escrow description"
-                value={newEscrow.description}
-                onChange={(e) => setNewEscrow({ ...newEscrow, description: e.target.value })}
-              />
-            </Form.Group>
-
-            <div className="d-grid gap-2">
-              <Button
-                variant="primary"
-                type="submit"
-                disabled={loading}
-              >
-                {loading ? (
-                  <>
-                    <Spinner
-                      as="span"
-                      animation="border"
-                      size="sm"
-                      role="status"
-                      aria-hidden="true"
-                      className="me-2"
-                    />
-                    Creating...
-                  </>
-                ) : (
-                  'Create Escrow'
-                )}
-              </Button>
-            </div>
-          </Form>
-        </Modal.Body>
-      </Modal>
-
-      {/* Escrow Details Modal */}
-      <Modal show={showDetailsModal} onHide={() => setShowDetailsModal(false)} size="lg">
-        <Modal.Header closeButton>
-          <Modal.Title>Escrow Details</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {selectedEscrow && (
-            <div>
-              <div className="mb-4">
-                <h6>Escrow #{selectedEscrow.id}</h6>
-                <div className="escrow-roles">
-                  <span className="role-badge buyer-badge">Buyer: {truncateAddress(selectedEscrow.buyer)}</span>
-                  <span className="role-badge seller-badge">Seller: {truncateAddress(selectedEscrow.seller)}</span>
-                  {selectedEscrow.arbiter && (
-                    <span className="role-badge arbiter-badge">Arbiter: {truncateAddress(selectedEscrow.arbiter)}</span>
-                  )}
-                </div>
-              </div>
-
-              <div className="mb-4">
-                <h6>Amount</h6>
-                <p className="mb-0">{ethers.utils.formatEther(selectedEscrow.amount)} MONAD</p>
-              </div>
-
-              <div className="mb-4">
-                <h6>Status</h6>
-                <div className={`escrow-status ${getStatusClass(selectedEscrow.status)}`}>
-                  {getStatusText(selectedEscrow.status)}
-                </div>
-              </div>
-
-              {selectedEscrow.description && (
-                <div className="mb-4">
-                  <h6>Description</h6>
-                  <p className="mb-0">{selectedEscrow.description}</p>
-                </div>
-              )}
-
-              <div className="d-grid gap-2">
-                {selectedEscrow.status === 0 && (
-                  <>
-                    {userRole === 'buyer' && (
-                      <Button
-                        variant="success"
-                        onClick={() => handleEscrowAction('release', selectedEscrow.id, selectedEscrow.seller)}
-                        disabled={loading}
-                      >
-                        {loading ? (
-                          <>
-                            <Spinner
-                              as="span"
-                              animation="border"
-                              size="sm"
-                              role="status"
-                              aria-hidden="true"
-                              className="me-2"
-                            />
-                            Processing...
-                          </>
-                        ) : (
-                          'Release Funds'
-                        )}
-                      </Button>
-                    )}
-                    {userRole === 'buyer' && (
-                      <Button
-                        variant="danger"
-                        onClick={() => handleEscrowAction('dispute', selectedEscrow.id)}
-                        disabled={loading}
-                      >
-                        {loading ? (
-                          <>
-                            <Spinner
-                              as="span"
-                              animation="border"
-                              size="sm"
-                              role="status"
-                              aria-hidden="true"
-                              className="me-2"
-                            />
-                            Processing...
-                          </>
-                        ) : (
-                          'Raise Dispute'
-                        )}
-                      </Button>
-                    )}
-                    {userRole === 'arbiter' && (
-                      <Button
-                        variant="warning"
-                        onClick={() => handleEscrowAction('resolve', selectedEscrow.id, selectedEscrow.seller)}
-                        disabled={loading}
-                      >
-                        {loading ? (
-                          <>
-                            <Spinner
-                              as="span"
-                              animation="border"
-                              size="sm"
-                              role="status"
-                              aria-hidden="true"
-                              className="me-2"
-                            />
-                            Processing...
-                          </>
-                        ) : (
-                          'Resolve Dispute'
-                        )}
-                      </Button>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-        </Modal.Body>
-      </Modal>
     </div>
   );
 }
