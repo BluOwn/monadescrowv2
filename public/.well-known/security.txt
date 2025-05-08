@@ -1,0 +1,22 @@
+Contact: https://twitter.com/Oprimedev
+Telegram: t.me/oprimedev
+Telegram: t.me/tebako
+E-mail: oprimedeveloper@gmail.com
+Preferred-Languages: en
+Canonical: https://testnet.monadescrow.xyz/.well-known/security.txt
+Expires: 2025-12-31T23:59:59.000Z
+
+# Monad Escrow Service Security Information
+# 
+# This is a legitimate DApp for secure escrow transactions on Monad Testnet
+# Contract Address: 0x44f703203A65b6b11ea3b4540cC30337F0630927
+# Source Code: https://github.com/BluOwn/monadescrow
+# 
+# Security Researchers:
+# Please report any vulnerabilities to the contact above
+# We maintain a responsible disclosure policy
+#
+# Users:
+# - Always verify the contract address before transacting
+# - This DApp only interacts with Monad Testnet
+# - Never share your private keys

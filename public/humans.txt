@@ -1,0 +1,39 @@
+# humanstxt.org/
+# The humans responsible & technology colophon
+
+# TEAM
+
+    Developer: Oprimedev
+    Contact: twitter.com/Oprimedev
+    Twitter: twitter.com/Oprimedev
+    Telegram: t.me/oprimedev
+    Telegram: t.me/tebako
+    E-mail: oprimedeveloper@gmail.com
+    Location: Decentralized
+
+# THANKS
+
+    Special thanks to the Monad Testnet community
+    
+# TECHNOLOGY COLOPHON
+
+    HTML5, CSS3, JavaScript
+    React, Bootstrap, Ethers.js
+    Smart Contracts: Solidity
+    Blockchain: Monad Testnet
+    IPFS/Web3
+    
+# SITE
+    
+    Standards: HTML5, CSS3, JavaScript ES6+
+    Components: React
+    Software: VSCode, Git
+    Language: English
+    Doctype: HTML5
+    
+# SECURITY
+    
+    Contract verified on Monad Explorer
+    Open source: github.com/BluOwn/monadescrow
+    Security audits: Welcome researchers
+    Responsible disclosure policy

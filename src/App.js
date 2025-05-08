@@ -4,8 +4,24 @@ import { Button, Card, Container, Form, ListGroup, Nav, Spinner, Alert, Modal, B
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
 
-// Replace this with your deployed contract address on Monad Testnet
-const ESCROW_SERVICE_ADDRESS = "0x44f703203A65b6b11ea3b4540cC30337F0630927";
+// Import security utilities and components
+import {
+  ESCROW_SERVICE_ADDRESS,
+  validateNetwork,
+  verifyContract,
+  executeTransactionSecurely,
+  validateAddress,
+  validateAmount,
+  handleError,
+  addSecurityHeaders
+} from './utils/security';
+
+import {
+  ContractInfo,
+  SecurityWarningModal,
+  SecurityBanner,
+  NetworkWarning
+} from './components/SecurityComponents';
 
 // Creator Information
 const CREATOR_WALLET = "0x0b977acab5d9b8f654f48090955f5e00973be0fe";
@@ -395,8 +411,31 @@ function App() {
   const [escrowIdToView, setEscrowIdToView] = useState('');
   const [recipientForDispute, setRecipientForDispute] = useState('');
 
+  // Security states
+  const [showSecurityWarning, setShowSecurityWarning] = useState(false);
+  const [hasAcceptedSecurity, setHasAcceptedSecurity] = useState(false);
+  const [firstTimeUser, setFirstTimeUser] = useState(true);
+
+  // Initialize security headers on component mount
+  useEffect(() => {
+    addSecurityHeaders();
+    
+    // Check if user has previously accepted security warning
+    const hasAccepted = localStorage.getItem('monad-escrow-security-accepted');
+    if (hasAccepted === 'true') {
+      setHasAcceptedSecurity(true);
+      setFirstTimeUser(false);
+    }
+  }, []);
+
   // Connect to MetaMask
   const connectWallet = async () => {
+    // Show security warning for first-time users
+    if (firstTimeUser && !hasAcceptedSecurity) {
+      setShowSecurityWarning(true);
+      return;
+    }
+
     if (window.ethereum) {
       try {
         setLoading(true);
@@ -407,75 +446,70 @@ function App() {
         
         if (accounts.length > 0) {
           const provider = new ethers.BrowserProvider(window.ethereum);
+          
+          // Validate network
+          try {
+            await validateNetwork(provider);
+          } catch (networkError) {
+            setError(networkError.message);
+            setLoading(false);
+            return;
+          }
+          
           const network = await provider.getNetwork();
           const signer = await provider.getSigner();
-          const chainId = network.chainId;
           
-          // Check if we're on Monad Testnet
-          if (chainId === 10143n) {
-            setProvider(provider);
-            setSigner(signer);
-            setAccount(accounts[0]);
-            setNetworkName('Monad Testnet');
-            setConnected(true);
-            
-            // Initialize contract
-            const escrowContract = new ethers.Contract(
-              ESCROW_SERVICE_ADDRESS,
-              ESCROW_SERVICE_ABI,
-              signer
-            );
-            setContract(escrowContract);
-            
-            // Load user's escrows
-            await loadUserEscrows(escrowContract, accounts[0]);
-            
-            // Load escrows where user is arbiter
-            await loadArbitratedEscrows(escrowContract, accounts[0]);
-          } else {
-            setError('Please connect to Monad Testnet');
-            try {
-              // Prompt user to switch to Monad Testnet
-              await window.ethereum.request({
-                method: 'wallet_switchEthereumChain',
-                params: [{ chainId: '0x2797' }], // 10143 in hex
-              });
-            } catch (switchError) {
-              // If the network is not added, try to add it
-              if (switchError.code === 4902) {
-                try {
-                  await window.ethereum.request({
-                    method: 'wallet_addEthereumChain',
-                    params: [{
-                      chainId: '0x2797', // 10143 in hex
-                      chainName: 'Monad Testnet',
-                      nativeCurrency: {
-                        name: 'MON',
-                        symbol: 'MON',
-                        decimals: 18
-                      },
-                      rpcUrls: ['https://testnet-rpc.monad.xyz'],
-                      blockExplorerUrls: ['https://testnet.monadexplorer.com']
-                    }]
-                  });
-                } catch (addError) {
-                  setError('Failed to add Monad Testnet to MetaMask');
-                }
-              } else {
-                setError('Failed to switch to Monad Testnet');
-              }
-            }
+          setProvider(provider);
+          setSigner(signer);
+          setAccount(accounts[0]);
+          setNetworkName('Monad Testnet');
+          setConnected(true);
+          
+          // Initialize contract with verification
+          const isContractValid = await verifyContract(provider, ESCROW_SERVICE_ADDRESS, ESCROW_SERVICE_ABI);
+          
+          if (!isContractValid) {
+            throw new Error('Contract verification failed. Please check the contract address.');
           }
+          
+          const escrowContract = new ethers.Contract(
+            ESCROW_SERVICE_ADDRESS,
+            ESCROW_SERVICE_ABI,
+            signer
+          );
+          setContract(escrowContract);
+          
+          // Load user's escrows
+          await loadUserEscrows(escrowContract, accounts[0]);
+          
+          // Load escrows where user is arbiter
+          await loadArbitratedEscrows(escrowContract, accounts[0]);
         }
       } catch (error) {
         console.error("Error connecting to MetaMask", error);
-        setError('Failed to connect wallet: ' + error.message);
+        setError(handleError(error, 'connect wallet'));
       } finally {
         setLoading(false);
       }
     } else {
       setError('Please install MetaMask');
     }
+  };
+
+  // Handle security warning acceptance
+  const handleSecurityAccept = () => {
+    setHasAcceptedSecurity(true);
+    setFirstTimeUser(false);
+    setShowSecurityWarning(false);
+    localStorage.setItem('monad-escrow-security-accepted', 'true');
+    
+    // Continue with wallet connection
+    connectWallet();
+  };
+
+  const handleSecurityDecline = () => {
+    setShowSecurityWarning(false);
+    // Don't connect wallet if user declines
   };
 
   // Load user's escrows (buyer or seller)
@@ -548,34 +582,47 @@ function App() {
   const handleCreateEscrow = async (e) => {
     e.preventDefault();
     
-    if (!sellerAddress || !arbiterAddress || !amount) {
-      setError('Please fill out all fields');
-      return;
-    }
-    
     try {
+      // Validate inputs
+      validateAddress(sellerAddress, 'Seller address');
+      validateAddress(arbiterAddress, 'Arbiter address');
+      validateAmount(amount);
+      
+      // Check that addresses are different
+      if (sellerAddress.toLowerCase() === account.toLowerCase()) {
+        throw new Error('Seller address cannot be the same as buyer address');
+      }
+      if (arbiterAddress.toLowerCase() === account.toLowerCase()) {
+        throw new Error('Arbiter address cannot be the same as buyer address');
+      }
+      if (sellerAddress.toLowerCase() === arbiterAddress.toLowerCase()) {
+        throw new Error('Seller and arbiter addresses must be different');
+      }
+      
       setLoading(true);
       setError('');
       
       const amountInWei = ethers.parseEther(amount);
-      const tx = await contract.createEscrow(
-        sellerAddress,
-        arbiterAddress,
-        { value: amountInWei }
+      
+      // Use secure transaction execution
+      const receipt = await executeTransactionSecurely(
+        contract,
+        'createEscrow',
+        [sellerAddress, arbiterAddress],
+        amountInWei
       );
       
-      await tx.wait();
-      
-      setSuccessMessage(`Escrow created successfully! Transaction hash: ${tx.hash}`);
+      setSuccessMessage(`Escrow created successfully! Transaction hash: ${receipt.hash}`);
       setSellerAddress('');
       setArbiterAddress('');
       setAmount('');
       
       // Reload escrows
       await loadUserEscrows(contract, account);
+      await loadArbitratedEscrows(contract, account);
     } catch (error) {
       console.error("Error creating escrow", error);
-      setError('Failed to create escrow: ' + error.message);
+      setError(handleError(error, 'create escrow'));
     } finally {
       setLoading(false);
     }
@@ -614,17 +661,17 @@ function App() {
       setLoading(true);
       setError('');
       
-      let tx;
+      let receipt;
       
       switch (action) {
         case 'release':
-          tx = await contract.releaseFunds(escrowId);
+          receipt = await executeTransactionSecurely(contract, 'releaseFunds', [escrowId]);
           break;
         case 'refund':
-          tx = await contract.refundBuyer(escrowId);
+          receipt = await executeTransactionSecurely(contract, 'refundBuyer', [escrowId]);
           break;
         case 'dispute':
-          tx = await contract.raiseDispute(escrowId);
+          receipt = await executeTransactionSecurely(contract, 'raiseDispute', [escrowId]);
           break;
         case 'resolve':
           if (!recipient) {
@@ -632,7 +679,8 @@ function App() {
             setLoading(false);
             return;
           }
-          tx = await contract.resolveDispute(escrowId, recipient);
+          validateAddress(recipient, 'Recipient');
+          receipt = await executeTransactionSecurely(contract, 'resolveDispute', [escrowId, recipient]);
           break;
         default:
           setError('Invalid action');
@@ -640,9 +688,7 @@ function App() {
           return;
       }
       
-      await tx.wait();
-      
-      setSuccessMessage(`Action ${action} executed successfully! Transaction hash: ${tx.hash}`);
+      setSuccessMessage(`Action ${action} executed successfully! Transaction hash: ${receipt.hash}`);
       
       // Reload escrows
       await loadUserEscrows(contract, account);
@@ -654,7 +700,7 @@ function App() {
       }
     } catch (error) {
       console.error(`Error executing ${action}`, error);
-      setError(`Failed to execute ${action}: ${error.message}`);
+      setError(handleError(error, action));
     } finally {
       setLoading(false);
     }
@@ -716,8 +762,17 @@ function App() {
           <p>Secure your transactions with smart contract escrow on Monad Testnet</p>
         </div>
         
+        {/* Security Warning Modal */}
+        <SecurityWarningModal 
+          show={showSecurityWarning}
+          onAccept={handleSecurityAccept}
+          onDecline={handleSecurityDecline}
+        />
+        
         {!connected ? (
           <div className="connect-wallet-container">
+            <SecurityBanner />
+            <ContractInfo />
             <p>Connect your wallet to use the escrow service</p>
             <Button 
               className="wallet-button"
@@ -738,6 +793,12 @@ function App() {
                 Disconnect
               </Button>
             </div>
+            
+            {/* Security Banner */}
+            <SecurityBanner />
+            
+            {/* Network Warning */}
+            <NetworkWarning currentNetwork={networkName} />
             
             {error && (
               <Alert variant="danger" onClose={() => setError('')} dismissible>
@@ -775,6 +836,7 @@ function App() {
               <Card>
                 <Card.Body>
                   <Card.Title>Create New Escrow</Card.Title>
+                  <ContractInfo />
                   <Form onSubmit={handleCreateEscrow}>
                     <Form.Group className="mb-3">
                       <Form.Label>Seller Address</Form.Label>
@@ -814,7 +876,7 @@ function App() {
                         required
                       />
                       <Form.Text className="text-muted">
-                        The amount to place in escrow
+                        The amount to place in escrow (Max: 1000 MON)
                       </Form.Text>
                     </Form.Group>
                     
@@ -888,71 +950,71 @@ function App() {
               </Card>
             )}
 
-            {activeTab === 'arbitrated' && (
-              <Card>
-                <Card.Body>
-                  <Card.Title>Escrows You're Arbitrating</Card.Title>
-                  {arbitratedEscrows.length === 0 ? (
-                    <p className="text-center my-4">You're not arbitrating any escrows yet</p>
-                  ) : (
-                    <ListGroup>
-                      {arbitratedEscrows.map((escrow) => (
-                        <ListGroup.Item 
-                          key={escrow.id.toString()} 
-                          className="escrow-item arbiter-item"
-                        >
-                          <div className="escrow-info">
-                            <div className="d-flex align-items-center">
-                              <strong>Escrow #{escrow.id.toString()}</strong>
-                              <span className="role-badge arbiter-badge ms-2">You are the Arbiter</span>
-                            </div>
-                            <p className="mb-1">Amount: {escrow.amount} MON</p>
-                            <p className="mb-1">Buyer: {truncateAddress(escrow.buyer)}</p>
-                            <p className="mb-1">Seller: {truncateAddress(escrow.seller)}</p>
-                            <span 
-                              className={`escrow-status ${
-                                escrow.fundsDisbursed 
-                                  ? 'status-completed' 
-                                  : escrow.disputeRaised 
-                                    ? 'status-disputed' 
-                                    : 'status-active'
-                              }`}
-                            >
-                              {escrow.fundsDisbursed 
-                                ? 'Completed' 
-                                : escrow.disputeRaised 
-                                  ? 'Disputed' 
-                                  : 'Active'}
-                            </span>
-                          </div>
-                          <div className="d-flex flex-column">
-                            <Button 
-                              variant="outline-info" 
-                              size="sm"
-                              className="mb-2"
-                              onClick={() => viewEscrowDetails(escrow.id)}
-                            >
-                              View Details
-                            </Button>
-                            
-                            {!escrow.fundsDisbursed && !escrow.disputeRaised && (
-                              <Button 
-                                variant="outline-warning" 
-                                size="sm"
-                                onClick={() => handleEscrowAction('refund', escrow.id)}
-                                disabled={loading}
-                              >
-                                Refund Buyer
-                              </Button>
-                            )}
-                          </div>
-                        </ListGroup.Item>
-                      ))}
-                    </ListGroup>
-                  )}
-                </Card.Body>
-              </Card>
-            )}
+{activeTab === 'arbitrated' && (
+  <Card>
+    <Card.Body>
+      <Card.Title>Escrows You're Arbitrating</Card.Title>
+      {arbitratedEscrows.length === 0 ? (
+        <p className="text-center my-4">You're not arbitrating any escrows yet</p>
+      ) : (
+        <ListGroup>
+          {arbitratedEscrows.map((escrow) => (
+            <ListGroup.Item 
+              key={escrow.id.toString()} 
+              className="escrow-item arbiter-item"
+            >
+              <div className="escrow-info">
+                <div className="d-flex align-items-center">
+                  <strong>Escrow #{escrow.id.toString()}</strong>
+                  <span className="role-badge arbiter-badge ms-2">You are the Arbiter</span>
+                </div>
+                <p className="mb-1">Amount: {escrow.amount} MON</p>
+                <p className="mb-1">Buyer: {truncateAddress(escrow.buyer)}</p>
+                <p className="mb-1">Seller: {truncateAddress(escrow.seller)}</p>
+                <span 
+                  className={`escrow-status ${
+                    escrow.fundsDisbursed 
+                      ? 'status-completed' 
+                      : escrow.disputeRaised 
+                        ? 'status-disputed' 
+                        : 'status-active'
+                  }`}
+                >
+                  {escrow.fundsDisbursed 
+                    ? 'Completed' 
+                    : escrow.disputeRaised 
+                      ? 'Disputed' 
+                      : 'Active'}
+                </span>
+              </div>
+              <div className="d-flex flex-column">
+                <Button 
+                  variant="outline-info" 
+                  size="sm"
+                  className="mb-2"
+                  onClick={() => viewEscrowDetails(escrow.id)}
+                >
+                  View Details
+                </Button>
+                
+                {!escrow.fundsDisbursed && !escrow.disputeRaised && (
+                  <Button 
+                    variant="outline-warning" 
+                    size="sm"
+                    onClick={() => handleEscrowAction('refund', escrow.id)}
+                    disabled={loading}
+                  >
+                    Refund Buyer
+                  </Button>
+                )}
+              </div>
+            </ListGroup.Item>
+          ))}
+        </ListGroup>
+      )}
+    </Card.Body>
+  </Card>
+)}
             
             {activeTab === 'find' && (
               <Card>
@@ -1123,7 +1185,8 @@ function App() {
                                   size="sm" 
                                   onClick={() => handleEscrowAction('resolve', selectedEscrow.id, recipientForDispute)}
                                   disabled={loading || !recipientForDispute}
-                                >Resolve Dispute
+                                >
+                                  Resolve Dispute
                                 </Button>
                               </div>
                             )}
@@ -1147,21 +1210,20 @@ function App() {
                 Created by <a href={`https://twitter.com/${CREATOR_TWITTER.substring(1)}`} target="_blank" rel="noopener noreferrer">{CREATOR_TWITTER}</a>
               </p>
               <p>
-  Creator wallet:{" "}
-  <a
-    href={`https://testnet.monadexplorer.com/address/${CREATOR_WALLET}`}
-    onClick={(e) => {
-      e.preventDefault(); // prevent default to control the behavior
-      navigator.clipboard.writeText(CREATOR_WALLET); // copy to clipboard
-      window.open(e.currentTarget.href, "_blank"); // open in new tab
-    }}
-    style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
-    title="Click to open and copy"
-  >
-    {CREATOR_WALLET}
-  </a>
-</p>
-
+                Creator wallet:{" "}
+                <a
+                  href={`https://testnet.monadexplorer.com/address/${CREATOR_WALLET}`}
+                  onClick={(e) => {
+                    e.preventDefault(); // prevent default to control the behavior
+                    navigator.clipboard.writeText(CREATOR_WALLET); // copy to clipboard
+                    window.open(e.currentTarget.href, "_blank"); // open in new tab
+                  }}
+                  style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
+                  title="Click to open and copy"
+                >
+                  {CREATOR_WALLET}
+                </a>
+              </p>
               <p>
                 <a href="https://github.com/BluOwn/monadescrow" target="_blank" rel="noopener noreferrer">View on GitHub</a>
               </p>
