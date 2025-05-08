@@ -419,6 +419,10 @@ function App() {
   const [hasAcceptedSecurity, setHasAcceptedSecurity] = useState(false);
   const [firstTimeUser, setFirstTimeUser] = useState(true);
 
+  // Loading states for better UX
+  const [loadingEscrows, setLoadingEscrows] = useState(false);
+  const [loadingArbitratedEscrows, setLoadingArbitratedEscrows] = useState(false);
+
   // Initialize security headers on component mount
   useEffect(() => {
     addSecurityHeaders();
@@ -482,10 +486,13 @@ function App() {
           );
           setContract(escrowContract);
           
-          // Load user's escrows
+          // Add a small delay to ensure contract is fully initialized
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Load user's escrows with retry logic
           await loadUserEscrows(escrowContract, accounts[0]);
           
-          // Load escrows where user is arbiter
+          // Load escrows where user is arbiter with retry logic
           await loadArbitratedEscrows(escrowContract, accounts[0]);
         }
       } catch (error) {
@@ -515,51 +522,34 @@ function App() {
     // Don't connect wallet if user declines
   };
 
-  // Load user's escrows (buyer or seller)
-  const loadUserEscrows = async (escrowContract, userAddress) => {
-    try {
-      const escrowIds = await escrowContract.getUserEscrows(userAddress);
-      
-      const escrowDetails = [];
-      for (let i = 0; i < escrowIds.length; i++) {
-        const escrowId = escrowIds[i];
-        const details = await escrowContract.getEscrow(escrowId);
+  // Load user's escrows with retry logic
+  const loadUserEscrows = async (escrowContract, userAddress, maxRetries = 3) => {
+    let retries = 0;
+    setLoadingEscrows(true);
+    
+    while (retries < maxRetries) {
+      try {
+        // Add a small delay to ensure contract is properly initialized
+        if (retries > 0) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
         
-        escrowDetails.push({
-          id: escrowId,
-          buyer: details[0],
-          seller: details[1],
-          arbiter: details[2],
-          amount: ethers.formatEther(details[3]),
-          fundsDisbursed: details[4],
-          disputeRaised: details[5]
-        });
-      }
-      
-      setEscrows(escrowDetails);
-    } catch (error) {
-      console.error("Error loading escrows", error);
-      setError('Failed to load escrows: ' + error.message);
-    }
-  };
-  
-  // Load escrows where user is arbiter
-  const loadArbitratedEscrows = async (escrowContract, arbiterAddress) => {
-    try {
-      // Get total escrow count
-      const escrowCount = await escrowContract.getEscrowCount();
-      
-      const arbitratedEscrows = [];
-      
-      // This is a simple approach - in a production app you might want to use events or indexing
-      for (let i = 0; i < escrowCount; i++) {
-        try {
-          const details = await escrowContract.getEscrow(i);
-          
-          // Check if the user is the arbiter for this escrow
-          if (details[2].toLowerCase() === arbiterAddress.toLowerCase()) {
-            arbitratedEscrows.push({
-              id: i,
+        // First check if contract is properly initialized
+        if (!escrowContract || !escrowContract.getUserEscrows) {
+          throw new Error('Contract not properly initialized');
+        }
+        
+        // Verify the contract has the function we need
+        const escrowIds = await escrowContract.getUserEscrows(userAddress);
+        
+        const escrowDetails = [];
+        for (let i = 0; i < escrowIds.length; i++) {
+          try {
+            const escrowId = escrowIds[i];
+            const details = await escrowContract.getEscrow(escrowId);
+            
+            escrowDetails.push({
+              id: escrowId,
               buyer: details[0],
               seller: details[1],
               arbiter: details[2],
@@ -567,17 +557,96 @@ function App() {
               fundsDisbursed: details[4],
               disputeRaised: details[5]
             });
+          } catch (innerError) {
+            console.warn(`Error loading escrow ${escrowIds[i]}:`, innerError);
+            // Continue with other escrows even if one fails
           }
-        } catch (err) {
-          // Skip any errors (e.g., if an escrow ID doesn't exist)
-          console.log(`Error fetching escrow #${i}:`, err);
+        }
+        
+        setEscrows(escrowDetails);
+        setLoadingEscrows(false);
+        return; // Success, exit the retry loop
+        
+      } catch (error) {
+        console.error(`Attempt ${retries + 1} failed loading escrows:`, error);
+        retries++;
+        
+        if (retries >= maxRetries) {
+          setLoadingEscrows(false);
+          // Only show error after all retries failed
+          if (error.message.includes('missing revert data')) {
+            setError('Unable to load escrows. Please ensure you are connected to the correct network and the contract is deployed. Try refreshing the page.');
+          } else {
+            setError('Failed to load escrows: ' + error.message);
+          }
         }
       }
-      
-      setArbitratedEscrows(arbitratedEscrows);
-    } catch (error) {
-      console.error("Error loading arbitrated escrows", error);
-      setError('Failed to load arbitrated escrows: ' + error.message);
+    }
+  };
+  
+  // Load escrows where user is arbiter with retry logic
+  const loadArbitratedEscrows = async (escrowContract, arbiterAddress, maxRetries = 3) => {
+    let retries = 0;
+    setLoadingArbitratedEscrows(true);
+    
+    while (retries < maxRetries) {
+      try {
+        // Add a small delay to ensure contract is properly initialized
+        if (retries > 0) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        
+        // First check if contract is properly initialized
+        if (!escrowContract || !escrowContract.getEscrowCount) {
+          throw new Error('Contract not properly initialized');
+        }
+        
+        // Get total escrow count
+        const escrowCount = await escrowContract.getEscrowCount();
+        
+        const arbitratedEscrows = [];
+        
+        // This is a simple approach - in a production app you might want to use events or indexing
+        for (let i = 0; i < escrowCount; i++) {
+          try {
+            const details = await escrowContract.getEscrow(i);
+            
+            // Check if the user is the arbiter for this escrow
+            if (details[2].toLowerCase() === arbiterAddress.toLowerCase()) {
+              arbitratedEscrows.push({
+                id: i,
+                buyer: details[0],
+                seller: details[1],
+                arbiter: details[2],
+                amount: ethers.formatEther(details[3]),
+                fundsDisbursed: details[4],
+                disputeRaised: details[5]
+              });
+            }
+          } catch (err) {
+            // Skip any errors (e.g., if an escrow ID doesn't exist)
+            console.warn(`Error fetching escrow #${i}:`, err);
+          }
+        }
+        
+        setArbitratedEscrows(arbitratedEscrows);
+        setLoadingArbitratedEscrows(false);
+        return; // Success, exit the retry loop
+        
+      } catch (error) {
+        console.error(`Attempt ${retries + 1} failed loading arbitrated escrows:`, error);
+        retries++;
+        
+        if (retries >= maxRetries) {
+          setLoadingArbitratedEscrows(false);
+          // Only show error after all retries failed
+          if (error.message.includes('missing revert data')) {
+            setError('Unable to load arbitrated escrows. Please ensure you are connected to the correct network and the contract is deployed. Try refreshing the page.');
+          } else {
+            setError('Failed to load arbitrated escrows: ' + error.message);
+          }
+        }
+      }
     }
   };
 
@@ -730,12 +799,12 @@ function App() {
   // Effect for handling account changes
   useEffect(() => {
     if (window.ethereum) {
-      const handleAccountsChanged = (accounts) => {
+      const handleAccountsChanged = async (accounts) => {
         if (accounts.length > 0) {
           setAccount(accounts[0]);
           if (contract) {
-            loadUserEscrows(contract, accounts[0]);
-            loadArbitratedEscrows(contract, accounts[0]);
+            await loadUserEscrows(contract, accounts[0]);
+            await loadArbitratedEscrows(contract, accounts[0]);
           }
         } else {
           setConnected(false);
@@ -756,6 +825,14 @@ function App() {
       };
     }
   }, [contract]);
+
+  // Retry loading escrows button
+  const retryLoadingEscrows = async () => {
+    if (contract && account) {
+      await loadUserEscrows(contract, account);
+      await loadArbitratedEscrows(contract, account);
+    }
+  };
 
   return (
     <div className="app-wrapper">
@@ -806,6 +883,13 @@ function App() {
             {error && (
               <Alert variant="danger" onClose={() => setError('')} dismissible>
                 {error}
+                {error.includes('refresh') && (
+                  <div className="mt-2">
+                    <Button variant="danger" size="sm" onClick={retryLoadingEscrows}>
+                      Retry Loading
+                    </Button>
+                  </div>
+                )}
               </Alert>
             )}
             
@@ -820,7 +904,10 @@ function App() {
                 <Nav.Link eventKey="create">Create Escrow</Nav.Link>
               </Nav.Item>
               <Nav.Item>
-                <Nav.Link eventKey="my">My Escrows</Nav.Link>
+                <Nav.Link eventKey="my">
+                  My Escrows
+                  {loadingEscrows && <Spinner animation="border" size="sm" className="ms-2" />}
+                </Nav.Link>
               </Nav.Item>
               <Nav.Item>
                 <Nav.Link eventKey="arbitrated">
@@ -828,6 +915,7 @@ function App() {
                   {arbitratedEscrows.length > 0 && (
                     <Badge bg="primary" className="ms-2">{arbitratedEscrows.length}</Badge>
                   )}
+                  {loadingArbitratedEscrows && <Spinner animation="border" size="sm" className="ms-2" />}
                 </Nav.Link>
               </Nav.Item>
               <Nav.Item>
@@ -902,8 +990,18 @@ function App() {
               <Card>
                 <Card.Body>
                   <Card.Title>My Escrows</Card.Title>
-                  {escrows.length === 0 ? (
-                    <p className="text-center my-4">You don't have any escrows yet</p>
+                  {loadingEscrows ? (
+                    <div className="text-center my-4">
+                      <Spinner animation="border" />
+                      <p className="mt-2">Loading escrows...</p>
+                    </div>
+                  ) : escrows.length === 0 ? (
+                    <div className="text-center my-4">
+                      <p>You don't have any escrows yet</p>
+                      <Button variant="outline-primary" size="sm" onClick={retryLoadingEscrows}>
+                        Refresh
+                      </Button>
+                    </div>
                   ) : (
                     <ListGroup>
                       {escrows.map((escrow) => (
@@ -960,209 +1058,182 @@ function App() {
               <Card>
                 <Card.Body>
                   <Card.Title>Escrows You're Arbitrating</Card.Title>
-                  {arbitratedEscrows.length === 0 ? (
-                    <p className="text-center my-4">You're not arbitrating any escrows yet</p>
+                  {loadingArbitratedEscrows ? (
+                    <div className="text-center my-4">
+                      <Spinner animation="border" />
+                      <p className="mt-2">Loading arbitrated escrows...</p>
+                    </div>
+                  ) : arbitratedEscrows.length === 0 ? (
+                    <div className="text-center my-4">
+                      <p>You're not arbitrating any escrows yet</p>
+                      <Button variant="outline-primary" size="sm" onClick={retryLoadingEscrows}>
+                        Refresh
+                      </Button>
+                    </div>
                   ) : (
                     <ListGroup>
                       {arbitratedEscrows.map((escrow) => (
                         <ListGroup.Item 
                           key={escrow.id.toString()} 
                           className="escrow-item arbiter-item"
-                        ><div className="escrow-info">
-                        <div className="d-flex align-items-center">
-                          <strong>Escrow #{escrow.id.toString()}</strong>
-                          <span className="role-badge arbiter-badge ms-2">You are the Arbiter</span>
+                        >
+                          <div className="escrow-info">
+                            <div className="d-flex align-items-center">
+                              <strong>Escrow #{escrow.id.toString()}</strong>
+                              <span className="role-badge arbiter-badge ms-2">You are the Arbiter</span>
+                            </div>
+                            <p className="mb-1">Amount: {escrow.amount} MON</p>
+                            <p className="mb-1">Buyer: {truncateAddress(escrow.buyer)}</p>
+                            <p className="mb-1">Seller: {truncateAddress(escrow.seller)}</p>
+                            <span 
+                              className={`escrow-status ${
+                                escrow.fundsDisbursed 
+                                  ? 'status-completed' 
+                                  : escrow.disputeRaised 
+                                    ? 'status-disputed' 
+                                    : 'status-active'
+                              }`}
+                            >
+                              {escrow.fundsDisbursed 
+                                ? 'Completed' 
+                                : escrow.disputeRaised 
+                                  ? 'Disputed' 
+                                  : 'Active'}
+                            </span>
+                          </div>
+                          <div className="d-flex flex-column">
+                            <Button 
+                              variant="outline-info" 
+                              size="sm"
+                              className="mb-2"
+                              onClick={() => viewEscrowDetails(escrow.id)}
+                            >
+                              View Details
+                            </Button>
+                            
+                            {!escrow.fundsDisbursed && !escrow.disputeRaised && (
+                              <Button 
+                                variant="outline-warning" 
+                                size="sm"
+                                onClick={() => handleEscrowAction('refund', escrow.id)}
+                                disabled={loading}
+                              >
+                                Refund Buyer
+                              </Button>
+                            )}
+                          </div>
+                        </ListGroup.Item>
+                      ))}
+                    </ListGroup>
+                  )}
+                </Card.Body>
+              </Card>
+            )}
+            
+            {activeTab === 'find' && (
+              <Card>
+                <Card.Body>
+                  <Card.Title>Find Escrow by ID</Card.Title>
+                  <Form onSubmit={handleFindEscrow} className="mb-4">
+                    <Form.Group className="mb-3">
+                      <Form.Label>Escrow ID</Form.Label>
+                      <Form.Control
+                        type="text"
+                        placeholder="Enter escrow ID"
+                        value={escrowIdToView}
+                        onChange={(e) => setEscrowIdToView(e.target.value)}
+                        required
+                      />
+                    </Form.Group>
+                    
+                    <Button 
+                      variant="primary" 
+                      type="submit" 
+                      disabled={loading}
+                    >
+                      {loading ? <Spinner animation="border" size="sm" /> : 'Find Escrow'}
+                    </Button>
+                  </Form>
+                </Card.Body>
+              </Card>
+            )}
+            
+            {activeTab === 'contact' && (
+              <ContactForm />
+            )}
+            
+            {/* Escrow Details Modal */}
+            <Modal show={showDetailsModal} onHide={() => setShowDetailsModal(false)}>
+              <Modal.Header closeButton>
+                <Modal.Title>Escrow Details</Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                {selectedEscrow && (
+                  <>
+                    <p><strong>Escrow ID:</strong> {selectedEscrow.id.toString()}</p>
+                    
+                    <div className="user-role-section mb-3">
+                      {account.toLowerCase() === selectedEscrow.buyer.toLowerCase() && (
+                        <div className="user-role-indicator">
+                          <span className="role-badge buyer-badge">You are the Buyer</span>
                         </div>
-                        <p className="mb-1">Amount: {escrow.amount} MON</p>
-                        <p className="mb-1">Buyer: {truncateAddress(escrow.buyer)}</p>
-                        <p className="mb-1">Seller: {truncateAddress(escrow.seller)}</p>
-                        <span 
-                          className={`escrow-status ${
-                            escrow.fundsDisbursed 
-                              ? 'status-completed' 
-                              : escrow.disputeRaised 
-                                ? 'status-disputed' 
-                                : 'status-active'
-                          }`}
-                        >
-                          {escrow.fundsDisbursed 
-                            ? 'Completed' 
-                            : escrow.disputeRaised 
-                              ? 'Disputed' 
-                              : 'Active'}
-                        </span>
-                      </div>
-                      <div className="d-flex flex-column">
-                        <Button 
-                          variant="outline-info" 
-                          size="sm"
-                          className="mb-2"
-                          onClick={() => viewEscrowDetails(escrow.id)}
-                        >
-                          View Details
-                        </Button>
+                      )}
+                      {account.toLowerCase() === selectedEscrow.seller.toLowerCase() && (
+                        <div className="user-role-indicator">
+                          <span className="role-badge seller-badge">You are the Seller</span>
+                        </div>
+                      )}
+                      {account.toLowerCase() === selectedEscrow.arbiter.toLowerCase() && (
+                        <div className="user-role-indicator">
+                          <span className="role-badge arbiter-badge">You are the Arbiter</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <p><strong>Buyer:</strong> <span className="address-display">{selectedEscrow.buyer}</span></p>
+                    <p><strong>Seller:</strong> <span className="address-display">{selectedEscrow.seller}</span></p>
+                    <p><strong>Arbiter:</strong> <span className="address-display">{selectedEscrow.arbiter}</span></p>
+                    <p><strong>Amount:</strong> {selectedEscrow.amount} MON</p>
+                    <p>
+                      <strong>Status:</strong>{' '}
+                      <span 
+                        className={`escrow-status ${
+                          selectedEscrow.fundsDisbursed 
+                            ? 'status-completed' 
+                            : selectedEscrow.disputeRaised 
+                              ? 'status-disputed' 
+                              : 'status-active'
+                        }`}
+                      >
+                        {selectedEscrow.fundsDisbursed 
+                          ? 'Completed' 
+                          : selectedEscrow.disputeRaised 
+                            ? 'Disputed' 
+                            : 'Active'}
+                      </span>
+                    </p>
+                    
+                    {!selectedEscrow.fundsDisbursed && (
+                      <div className="mt-4">
+                        <h6>Available Actions</h6>
                         
-                        {!escrow.fundsDisbursed && !escrow.disputeRaised && (
+                        {/* Buyer Actions */}
+                        {account.toLowerCase() === selectedEscrow.buyer.toLowerCase() && 
+                         !selectedEscrow.disputeRaised && (
                           <Button 
-                            variant="outline-warning" 
-                            size="sm"
-                            onClick={() => handleEscrowAction('refund', escrow.id)}
+                            variant="success" 
+                            size="sm" 
+                            className="me-2 mb-2" 
+                            onClick={() => handleEscrowAction('release', selectedEscrow.id)}
                             disabled={loading}
                           >
-                            Refund Buyer
+                            Release Funds to Seller
                           </Button>
                         )}
-                      </div>
-                    </ListGroup.Item>
-                  ))}
-                </ListGroup>
-              )}
-            </Card.Body>
-          </Card>
-        )}
-        
-        {activeTab === 'find' && (
-          <Card>
-            <Card.Body>
-              <Card.Title>Find Escrow by ID</Card.Title>
-              <Form onSubmit={handleFindEscrow} className="mb-4">
-                <Form.Group className="mb-3">
-                  <Form.Label>Escrow ID</Form.Label>
-                  <Form.Control
-                    type="text"
-                    placeholder="Enter escrow ID"
-                    value={escrowIdToView}
-                    onChange={(e) => setEscrowIdToView(e.target.value)}
-                    required
-                  />
-                </Form.Group>
-                
-                <Button 
-                  variant="primary" 
-                  type="submit" 
-                  disabled={loading}
-                >
-                  {loading ? <Spinner animation="border" size="sm" /> : 'Find Escrow'}
-                </Button>
-              </Form>
-            </Card.Body>
-          </Card>
-        )}
-        
-        {activeTab === 'contact' && (
-          <ContactForm />
-        )}
-        
-        {/* Escrow Details Modal */}
-        <Modal show={showDetailsModal} onHide={() => setShowDetailsModal(false)}>
-          <Modal.Header closeButton>
-            <Modal.Title>Escrow Details</Modal.Title>
-          </Modal.Header>
-          <Modal.Body>
-            {selectedEscrow && (
-              <>
-                <p><strong>Escrow ID:</strong> {selectedEscrow.id.toString()}</p>
-                
-                <div className="user-role-section mb-3">
-                  {account.toLowerCase() === selectedEscrow.buyer.toLowerCase() && (
-                    <div className="user-role-indicator">
-                      <span className="role-badge buyer-badge">You are the Buyer</span>
-                    </div>
-                  )}
-                  {account.toLowerCase() === selectedEscrow.seller.toLowerCase() && (
-                    <div className="user-role-indicator">
-                      <span className="role-badge seller-badge">You are the Seller</span>
-                    </div>
-                  )}
-                  {account.toLowerCase() === selectedEscrow.arbiter.toLowerCase() && (
-                    <div className="user-role-indicator">
-                      <span className="role-badge arbiter-badge">You are the Arbiter</span>
-                    </div>
-                  )}
-                </div>
-                
-                <p><strong>Buyer:</strong> <span className="address-display">{selectedEscrow.buyer}</span></p>
-                <p><strong>Seller:</strong> <span className="address-display">{selectedEscrow.seller}</span></p>
-                <p><strong>Arbiter:</strong> <span className="address-display">{selectedEscrow.arbiter}</span></p>
-                <p><strong>Amount:</strong> {selectedEscrow.amount} MON</p>
-                <p>
-                  <strong>Status:</strong>{' '}
-                  <span 
-                    className={`escrow-status ${
-                      selectedEscrow.fundsDisbursed 
-                        ? 'status-completed' 
-                        : selectedEscrow.disputeRaised 
-                          ? 'status-disputed' 
-                          : 'status-active'
-                    }`}
-                  >
-                    {selectedEscrow.fundsDisbursed 
-                      ? 'Completed' 
-                      : selectedEscrow.disputeRaised 
-                        ? 'Disputed' 
-                        : 'Active'}
-                  </span>
-                </p>
-                
-                {!selectedEscrow.fundsDisbursed && (
-                  <div className="mt-4">
-                    <h6>Available Actions</h6>
-                    
-                    {/* Buyer Actions */}
-                    {account.toLowerCase() === selectedEscrow.buyer.toLowerCase() && 
-                     !selectedEscrow.disputeRaised && (
-                      <Button 
-                        variant="success" 
-                        size="sm" 
-                        className="me-2 mb-2" 
-                        onClick={() => handleEscrowAction('release', selectedEscrow.id)}
-                        disabled={loading}
-                      >
-                        Release Funds to Seller
-                      </Button>
-                    )}
-                    
-                    {/* Seller Actions */}
-                    {account.toLowerCase() === selectedEscrow.seller.toLowerCase() && 
-                     !selectedEscrow.disputeRaised && (
-                      <Button 
-                        variant="warning" 
-                        size="sm" 
-                        className="me-2 mb-2" 
-                        onClick={() => handleEscrowAction('refund', selectedEscrow.id)}
-                        disabled={loading}
-                      >
-                        Refund Buyer
-                      </Button>
-                    )}
-                    
-                    {/* Dispute Actions (Buyer or Seller) */}
-                    {(account.toLowerCase() === selectedEscrow.buyer.toLowerCase() || 
-                      account.toLowerCase() === selectedEscrow.seller.toLowerCase()) && 
-                      !selectedEscrow.disputeRaised && (
-                      <Button 
-                        variant="danger" 
-                        size="sm" 
-                        className="me-2 mb-2" 
-                        onClick={() => handleEscrowAction('dispute', selectedEscrow.id)}
-                        disabled={loading}
-                      >
-                        Raise Dispute
-                      </Button>
-                    )}
-                    
-                    {/* Arbiter Actions */}
-                    {account.toLowerCase() === selectedEscrow.arbiter.toLowerCase() && (
-                      <div className="arbiter-actions mt-3">
-                        <div className="arbiter-notice mb-3">
-                          <Alert variant="info">
-                            <strong>Arbiter Controls</strong>
-                            <p className="mb-0">As the arbiter, you can resolve disputes or refund the buyer if needed.</p>
-                          </Alert>
-                        </div>
                         
-                        {/* Refund Button (always available to arbiter) */}
-                        {!selectedEscrow.disputeRaised && !selectedEscrow.fundsDisbursed && (
+                        {/* Seller Actions */}
+                        {account.toLowerCase() === selectedEscrow.seller.toLowerCase() && 
+                         !selectedEscrow.disputeRaised && (
                           <Button 
                             variant="warning" 
                             size="sm" 
@@ -1174,74 +1245,112 @@ function App() {
                           </Button>
                         )}
                         
-                        {/* Dispute Resolution (only if dispute raised) */}
-                        {selectedEscrow.disputeRaised && (
-                          <div>
-                            <Form.Group className="mb-2">
-                              <Form.Label>Resolve dispute in favor of:</Form.Label>
-                              <Form.Select 
-                                onChange={(e) => setRecipientForDispute(e.target.value)}
-                                className="mb-2"
-                              >
-                                <option value="">Select recipient</option>
-                                <option value={selectedEscrow.buyer}>Buyer</option>
-                                <option value={selectedEscrow.seller}>Seller</option>
-                              </Form.Select>
-                            </Form.Group>
+                        {/* Dispute Actions (Buyer or Seller) */}
+                        {(account.toLowerCase() === selectedEscrow.buyer.toLowerCase() || 
+                          account.toLowerCase() === selectedEscrow.seller.toLowerCase()) && 
+                          !selectedEscrow.disputeRaised && (
+                          <Button 
+                            variant="danger" 
+                            size="sm" 
+                            className="me-2 mb-2" 
+                            onClick={() => handleEscrowAction('dispute', selectedEscrow.id)}
+                            disabled={loading}
+                          >
+                            Raise Dispute
+                          </Button>
+                        )}
+                        
+                        {/* Arbiter Actions */}
+                        {account.toLowerCase() === selectedEscrow.arbiter.toLowerCase() && (
+                          <div className="arbiter-actions mt-3">
+                            <div className="arbiter-notice mb-3">
+                              <Alert variant="info">
+                                <strong>Arbiter Controls</strong>
+                                <p className="mb-0">As the arbiter, you can resolve disputes or refund the buyer if needed.</p>
+                              </Alert>
+                            </div>
                             
-                            <Button 
-                              variant="primary" 
-                              size="sm" 
-                              onClick={() => handleEscrowAction('resolve', selectedEscrow.id, recipientForDispute)}
-                              disabled={loading || !recipientForDispute}
-                            >
-                              Resolve Dispute
-                            </Button>
+                            {/* Refund Button (always available to arbiter) */}
+                            {!selectedEscrow.disputeRaised && !selectedEscrow.fundsDisbursed && (
+                              <Button 
+                                variant="warning" 
+                                size="sm" 
+                                className="me-2 mb-2" 
+                                onClick={() => handleEscrowAction('refund', selectedEscrow.id)}
+                                disabled={loading}
+                              >
+                                Refund Buyer
+                              </Button>
+                            )}
+                            
+                            {/* Dispute Resolution (only if dispute raised) */}
+                            {selectedEscrow.disputeRaised && (
+                              <div>
+                                <Form.Group className="mb-2">
+                                  <Form.Label>Resolve dispute in favor of:</Form.Label>
+                                  <Form.Select 
+                                    onChange={(e) => setRecipientForDispute(e.target.value)}
+                                    className="mb-2"
+                                  >
+                                    <option value="">Select recipient</option>
+                                    <option value={selectedEscrow.buyer}>Buyer</option>
+                                    <option value={selectedEscrow.seller}>Seller</option>
+                                  </Form.Select>
+                                </Form.Group>
+                                
+                                <Button 
+                                  variant="primary" 
+                                  size="sm" 
+                                  onClick={() => handleEscrowAction('resolve', selectedEscrow.id, recipientForDispute)}
+                                  disabled={loading || !recipientForDispute}
+                                >
+                                  Resolve Dispute
+                                </Button>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
                     )}
-                  </div>
+                  </>
                 )}
-              </>
-            )}
-          </Modal.Body>
-          <Modal.Footer>
-            <Button variant="secondary" onClick={() => setShowDetailsModal(false)}>
-              Close
-            </Button>
-          </Modal.Footer>
-        </Modal>
-        
-        {/* Footer with creator info */}
-        <div className="footer">
-          <p>
-            Created by <a href={`https://twitter.com/${CREATOR_TWITTER.substring(1)}`} target="_blank" rel="noopener noreferrer">{CREATOR_TWITTER}</a>
-          </p>
-          <p>
-            Creator wallet:{" "}
-            <a
-              href={`https://testnet.monadexplorer.com/address/${CREATOR_WALLET}`}
-              onClick={(e) => {
-                e.preventDefault(); // prevent default to control the behavior
-                navigator.clipboard.writeText(CREATOR_WALLET); // copy to clipboard
-                window.open(e.currentTarget.href, "_blank"); // open in new tab
-              }}
-              style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
-              title="Click to open and copy"
-            >
-              {CREATOR_WALLET}
-            </a>
-          </p>
-          <p>
-            <a href="https://github.com/BluOwn/monadescrow" target="_blank" rel="noopener noreferrer">View on GitHub</a>
-          </p>
-        </div>
-      </>
-    )}
-  </Container>
-</div>
-);
+              </Modal.Body>
+              <Modal.Footer>
+                <Button variant="secondary" onClick={() => setShowDetailsModal(false)}>
+                  Close
+                </Button>
+              </Modal.Footer>
+            </Modal>
+            
+            {/* Footer with creator info */}
+            <div className="footer">
+              <p>
+                Created by <a href={`https://twitter.com/${CREATOR_TWITTER.substring(1)}`} target="_blank" rel="noopener noreferrer">{CREATOR_TWITTER}</a>
+              </p>
+              <p>
+                Creator wallet:{" "}
+                <a
+                  href={`https://testnet.monadexplorer.com/address/${CREATOR_WALLET}`}
+                  onClick={(e) => {
+                    e.preventDefault(); // prevent default to control the behavior
+                    navigator.clipboard.writeText(CREATOR_WALLET); // copy to clipboard
+                    window.open(e.currentTarget.href, "_blank"); // open in new tab
+                  }}
+                  style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
+                  title="Click to open and copy"
+                >
+                  {CREATOR_WALLET}
+                </a>
+              </p>
+              <p>
+                <a href="https://github.com/BluOwn/monadescrow" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+              </p>
+            </div>
+          </>
+        )}
+      </Container>
+    </div>
+  );
 }
 
 export default App;
