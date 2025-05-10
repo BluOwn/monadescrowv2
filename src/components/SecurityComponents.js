@@ -1,6 +1,54 @@
 import React from 'react';
 import { Modal, Button, Alert } from 'react-bootstrap';
+import { ethers } from 'ethers';
+
+// Import ESCROW_SERVICE_ADDRESS from security.js
 import { ESCROW_SERVICE_ADDRESS } from '../utils/security';
+
+// IPFS message integrity verification
+export const verifyMessageIntegrity = (message) => {
+  try {
+    // In v5:
+    const messageHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(
+      `${message.escrowId}-${message.sender}-${message.timestamp}-${message.content}`
+    ));
+    
+    const recoveredAddress = ethers.utils.verifyMessage(
+      ethers.utils.arrayify(messageHash),
+      message.signature
+    );
+    
+    return recoveredAddress.toLowerCase() === message.sender.toLowerCase();
+  } catch (error) {
+    console.error('Message verification failed:', error);
+    return false;
+  }
+};
+
+// IPFS message functions
+export const uploadMessageToIPFS = async (messageData) => {
+  try {
+    // Simplified version - you'll replace this with Pinata integration
+    console.log('Would upload to IPFS:', messageData);
+    // This is a placeholder - in production you'd use the actual Pinata code
+    return { success: true, cid: 'sample-cid-' + Date.now() };
+  } catch (error) {
+    console.error('Failed to upload to IPFS:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const fetchMessageFromIPFS = async (cid) => {
+  try {
+    // Simplified version - you'll replace this with Pinata integration
+    console.log('Would fetch from IPFS:', cid);
+    // This is a placeholder - in production you'd use the actual Pinata code
+    return { messages: [] };
+  } catch (error) {
+    console.error('Failed to fetch from IPFS:', error);
+    return { messages: [] };
+  }
+};
 
 // Contract verification information component
 export const ContractInfo = () => {

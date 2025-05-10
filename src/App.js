@@ -23,6 +23,9 @@ import {
   NetworkWarning
 } from './components/SecurityComponents';
 
+// Import MessagePanel component
+import MessagePanel from './components/MessagePanel';
+
 // Import Contact Form
 import ContactForm from './components/ContactForm';
 
@@ -33,22 +36,34 @@ const CREATOR_TWITTER = "@Oprimedev";
 // ABI for the EscrowService contract
 const ESCROW_SERVICE_ABI = [
 	{
+		"inputs": [
+			{
+				"internalType": "bytes32",
+				"name": "operationId",
+				"type": "bytes32"
+			}
+		],
+		"name": "cancelTimelock",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"stateMutability": "nonpayable",
+		"type": "constructor"
+	},
+	{
 		"anonymous": false,
 		"inputs": [
 			{
 				"indexed": true,
-				"internalType": "uint256",
-				"name": "escrowId",
-				"type": "uint256"
-			},
-			{
-				"indexed": true,
 				"internalType": "address",
-				"name": "initiator",
+				"name": "by",
 				"type": "address"
 			}
 		],
-		"name": "DisputeRaised",
+		"name": "ContractPaused",
 		"type": "event"
 	},
 	{
@@ -56,105 +71,12 @@ const ESCROW_SERVICE_ABI = [
 		"inputs": [
 			{
 				"indexed": true,
-				"internalType": "uint256",
-				"name": "escrowId",
-				"type": "uint256"
-			},
-			{
-				"indexed": true,
 				"internalType": "address",
-				"name": "recipient",
+				"name": "by",
 				"type": "address"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "amount",
-				"type": "uint256"
 			}
 		],
-		"name": "DisputeResolved",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "uint256",
-				"name": "escrowId",
-				"type": "uint256"
-			},
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "buyer",
-				"type": "address"
-			},
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "seller",
-				"type": "address"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "amount",
-				"type": "uint256"
-			}
-		],
-		"name": "EscrowCreated",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "uint256",
-				"name": "escrowId",
-				"type": "uint256"
-			},
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "buyer",
-				"type": "address"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "amount",
-				"type": "uint256"
-			}
-		],
-		"name": "FundsRefunded",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "uint256",
-				"name": "escrowId",
-				"type": "uint256"
-			},
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "seller",
-				"type": "address"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "amount",
-				"type": "uint256"
-			}
-		],
-		"name": "FundsReleased",
+		"name": "ContractUnpaused",
 		"type": "event"
 	},
 	{
@@ -168,6 +90,16 @@ const ESCROW_SERVICE_ABI = [
 				"internalType": "address",
 				"name": "arbiter",
 				"type": "address"
+			},
+			{
+				"internalType": "string",
+				"name": "description",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "documentHash",
+				"type": "string"
 			}
 		],
 		"name": "createEscrow",
@@ -184,19 +116,6 @@ const ESCROW_SERVICE_ABI = [
 	{
 		"inputs": [
 			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"name": "escrows",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "buyer",
-				"type": "address"
-			},
-			{
 				"internalType": "address",
 				"name": "seller",
 				"type": "address"
@@ -207,98 +126,310 @@ const ESCROW_SERVICE_ABI = [
 				"type": "address"
 			},
 			{
+				"internalType": "address",
+				"name": "tokenAddress",
+				"type": "address"
+			},
+			{
 				"internalType": "uint256",
 				"name": "amount",
 				"type": "uint256"
 			},
 			{
-				"internalType": "bool",
-				"name": "fundsDisbursed",
-				"type": "bool"
+				"internalType": "string",
+				"name": "description",
+				"type": "string"
 			},
 			{
-				"internalType": "bool",
-				"name": "disputeRaised",
-				"type": "bool"
+				"internalType": "string",
+				"name": "documentHash",
+				"type": "string"
 			}
 		],
-		"stateMutability": "view",
+		"name": "createTokenEscrow",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "escrowId",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "initiator",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint8",
+				"name": "reason",
+				"type": "uint8"
+			}
+		],
+		"name": "DisputeRaised",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "escrowId",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "recipient",
+				"type": "address"
+			}
+		],
+		"name": "DisputeResolved",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "escrowId",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "buyer",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "seller",
+				"type": "address"
+			}
+		],
+		"name": "EscrowCreated",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "escrowId",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "tokenAddress",
+				"type": "address"
+			}
+		],
+		"name": "EscrowDetails",
+		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "tokenAddress",
+				"type": "address"
+			}
+		],
+		"name": "executeAddToken",
+		"outputs": [],
+		"stateMutability": "nonpayable",
 		"type": "function"
 	},
 	{
 		"inputs": [
 			{
 				"internalType": "uint256",
-				"name": "escrowId",
+				"name": "newFee",
 				"type": "uint256"
 			}
 		],
-		"name": "getEscrow",
-		"outputs": [
+		"name": "executeFeeUpdate",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
 			{
+				"internalType": "address",
+				"name": "newRecipient",
+				"type": "address"
+			}
+		],
+		"name": "executeRecipientUpdate",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "tokenAddress",
+				"type": "address"
+			}
+		],
+		"name": "executeRemoveToken",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "oldRecipient",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "newRecipient",
+				"type": "address"
+			}
+		],
+		"name": "FeeRecipientUpdated",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "oldFee",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "newFee",
+				"type": "uint256"
+			}
+		],
+		"name": "FeeUpdated",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "escrowId",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
 				"internalType": "address",
 				"name": "buyer",
 				"type": "address"
-			},
+			}
+		],
+		"name": "FundsRefunded",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
 			{
-				"internalType": "address",
-				"name": "seller",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "arbiter",
-				"type": "address"
-			},
-			{
+				"indexed": true,
 				"internalType": "uint256",
-				"name": "amount",
+				"name": "escrowId",
 				"type": "uint256"
 			},
 			{
-				"internalType": "bool",
-				"name": "fundsDisbursed",
-				"type": "bool"
-			},
-			{
-				"internalType": "bool",
-				"name": "disputeRaised",
-				"type": "bool"
+				"indexed": false,
+				"internalType": "address",
+				"name": "seller",
+				"type": "address"
 			}
 		],
-		"stateMutability": "view",
-		"type": "function"
+		"name": "FundsReleased",
+		"type": "event"
 	},
 	{
 		"inputs": [],
-		"name": "getEscrowCount",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"stateMutability": "view",
+		"name": "pauseContract",
+		"outputs": [],
+		"stateMutability": "nonpayable",
 		"type": "function"
 	},
 	{
 		"inputs": [
 			{
 				"internalType": "address",
-				"name": "user",
+				"name": "tokenAddress",
 				"type": "address"
 			}
 		],
-		"name": "getUserEscrows",
-		"outputs": [
+		"name": "proposeAddToken",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
 			{
-				"internalType": "uint256[]",
-				"name": "",
-				"type": "uint256[]"
+				"internalType": "uint256",
+				"name": "newFee",
+				"type": "uint256"
 			}
 		],
-		"stateMutability": "view",
+		"name": "proposeFeeUpdate",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "newRecipient",
+				"type": "address"
+			}
+		],
+		"name": "proposeRecipientUpdate",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "tokenAddress",
+				"type": "address"
+			}
+		],
+		"name": "proposeRemoveToken",
+		"outputs": [],
+		"stateMutability": "nonpayable",
 		"type": "function"
 	},
 	{
@@ -307,6 +438,16 @@ const ESCROW_SERVICE_ABI = [
 				"internalType": "uint256",
 				"name": "escrowId",
 				"type": "uint256"
+			},
+			{
+				"internalType": "uint8",
+				"name": "reason",
+				"type": "uint8"
+			},
+			{
+				"internalType": "string",
+				"name": "description",
+				"type": "string"
 			}
 		],
 		"name": "raiseDispute",
@@ -348,7 +489,7 @@ const ESCROW_SERVICE_ABI = [
 				"type": "uint256"
 			},
 			{
-				"internalType": "address payable",
+				"internalType": "address",
 				"name": "recipient",
 				"type": "address"
 			}
@@ -359,19 +500,380 @@ const ESCROW_SERVICE_ABI = [
 		"type": "function"
 	},
 	{
+		"anonymous": false,
 		"inputs": [
 			{
+				"indexed": true,
+				"internalType": "bytes32",
+				"name": "operationId",
+				"type": "bytes32"
+			}
+		],
+		"name": "TimelockCancelled",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "bytes32",
+				"name": "operationId",
+				"type": "bytes32"
+			}
+		],
+		"name": "TimelockExecuted",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "bytes32",
+				"name": "operationId",
+				"type": "bytes32"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "operation",
+				"type": "string"
+			}
+		],
+		"name": "TimelockInitiated",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
 				"internalType": "address",
-				"name": "",
+				"name": "tokenAddress",
 				"type": "address"
 			},
+			{
+				"indexed": false,
+				"internalType": "bool",
+				"name": "supported",
+				"type": "bool"
+			}
+		],
+		"name": "TokenStatusUpdated",
+		"type": "event"
+	},
+	{
+		"inputs": [],
+		"name": "unpauseContract",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "amount",
+				"type": "uint256"
+			}
+		],
+		"name": "calculateFee",
+		"outputs": [
 			{
 				"internalType": "uint256",
 				"name": "",
 				"type": "uint256"
 			}
 		],
-		"name": "userEscrows",
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "CREATOR",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "feePercentage",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "feeRecipient",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "getDefaultArbiter",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "pure",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "escrowId",
+				"type": "uint256"
+			}
+		],
+		"name": "getDisputeDetails",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "initiator",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "timestamp",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint8",
+				"name": "reason",
+				"type": "uint8"
+			},
+			{
+				"internalType": "string",
+				"name": "description",
+				"type": "string"
+			},
+			{
+				"internalType": "bool",
+				"name": "resolved",
+				"type": "bool"
+			},
+			{
+				"internalType": "address",
+				"name": "resolvedInFavorOf",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "resolutionTime",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "getEscrowCount",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "escrowId",
+				"type": "uint256"
+			}
+		],
+		"name": "getEscrowDetails",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "buyer",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "seller",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "arbiter",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "tokenAddress",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "amount",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "creationTime",
+				"type": "uint256"
+			},
+			{
+				"internalType": "bool",
+				"name": "fundsDisbursed",
+				"type": "bool"
+			},
+			{
+				"internalType": "bool",
+				"name": "disputeRaised",
+				"type": "bool"
+			},
+			{
+				"internalType": "string",
+				"name": "description",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "documentHash",
+				"type": "string"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "getSupportedTokens",
+		"outputs": [
+			{
+				"internalType": "address[]",
+				"name": "",
+				"type": "address[]"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "user",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "offset",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "limit",
+				"type": "uint256"
+			}
+		],
+		"name": "getUserEscrows",
+		"outputs": [
+			{
+				"internalType": "uint256[]",
+				"name": "escrowIds",
+				"type": "uint256[]"
+			},
+			{
+				"internalType": "uint256",
+				"name": "totalCount",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "paused",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"name": "supportedTokens",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "supportedTokensList",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "bytes32",
+				"name": "",
+				"type": "bytes32"
+			}
+		],
+		"name": "timelockExpirations",
 		"outputs": [
 			{
 				"internalType": "uint256",
@@ -452,7 +954,8 @@ function App() {
         const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
         
         if (accounts.length > 0) {
-          const provider = new ethers.BrowserProvider(window.ethereum);
+          // FIXED: Use Web3Provider instead of BrowserProvider
+          const provider = new ethers.providers.Web3Provider(window.ethereum);
           
           // Validate network
           try {
@@ -553,7 +1056,8 @@ function App() {
               buyer: details[0],
               seller: details[1],
               arbiter: details[2],
-              amount: ethers.formatEther(details[3]),
+              // FIXED: Use ethers.utils.formatEther
+              amount: ethers.utils.formatEther(details[3]),
               fundsDisbursed: details[4],
               disputeRaised: details[5]
             });
@@ -618,7 +1122,8 @@ function App() {
                 buyer: details[0],
                 seller: details[1],
                 arbiter: details[2],
-                amount: ethers.formatEther(details[3]),
+                // FIXED: Use ethers.utils.formatEther
+                amount: ethers.utils.formatEther(details[3]),
                 fundsDisbursed: details[4],
                 disputeRaised: details[5]
               });
@@ -674,7 +1179,8 @@ function App() {
       setLoading(true);
       setError('');
       
-      const amountInWei = ethers.parseEther(amount);
+      // FIXED: Use ethers.utils.parseEther
+      const amountInWei = ethers.utils.parseEther(amount);
       
       // Use secure transaction execution
       const receipt = await executeTransactionSecurely(
@@ -712,7 +1218,8 @@ function App() {
         buyer: details[0],
         seller: details[1],
         arbiter: details[2],
-        amount: ethers.formatEther(details[3]),
+        // FIXED: Use ethers.utils.formatEther
+        amount: ethers.utils.formatEther(details[3]),
         fundsDisbursed: details[4],
         disputeRaised: details[5]
       };
@@ -939,20 +1446,6 @@ function App() {
                         placeholder="0x..."
                         value={sellerAddress}
                         onChange={(e) => setSellerAddress(e.target.value)}
-                        required
-                      />
-                      <Form.Text className="text-muted">
-                        The address of the party who will receive the funds
-                      </Form.Text>
-                    </Form.Group>
-                    
-                    <Form.Group className="mb-3">
-                      <Form.Label>Arbiter Address</Form.Label>
-                      <Form.Control
-                        type="text"
-                        placeholder="0x..."
-                        value={arbiterAddress}
-                        onChange={(e) => setArbiterAddress(e.target.value)}
                         required
                       />
                       <Form.Text className="text-muted">
@@ -1312,6 +1805,15 @@ function App() {
                         )}
                       </div>
                     )}
+                    
+                    {/* Add Message Panel Component */}
+                    <hr />
+                    <MessagePanel
+                      escrowId={selectedEscrow.id.toString()}
+                      account={account}
+                      signer={signer}
+                      contract={contract}
+                    />
                   </>
                 )}
               </Modal.Body>
@@ -1353,4 +1855,4 @@ function App() {
   );
 }
 
-export default App;
+export default App;                      

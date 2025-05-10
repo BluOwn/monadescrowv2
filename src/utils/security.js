@@ -1,6 +1,6 @@
 import { ethers } from 'ethers';
 
-export const ESCROW_SERVICE_ADDRESS = "0x44f703203A65b6b11ea3b4540cC30337F0630927";
+export const ESCROW_SERVICE_ADDRESS = "0xDF337E85503399ecbf3F006fF85b7Ea5eefE7AC8";
 
 // Security notice for users
 export const SECURITY_NOTICE = `⚠️ SECURITY NOTICE:
@@ -13,7 +13,7 @@ export const SECURITY_NOTICE = `⚠️ SECURITY NOTICE:
 // Validate network connection
 export const validateNetwork = async (provider) => {
   const network = await provider.getNetwork();
-  const expectedChainId = 10143n; // Monad Testnet
+  const expectedChainId = 10143; // Monad Testnet
   
   if (network.chainId !== expectedChainId) {
     throw new Error(`Please switch to Monad Testnet manually in your wallet`);
@@ -71,7 +71,8 @@ export const validateAddress = (address, name = 'Address') => {
     throw new Error(`${name} is required`);
   }
   
-  if (!ethers.isAddress(address)) {
+  // FIXED: Use ethers.utils.isAddress instead of ethers.isAddress
+  if (!ethers.utils.isAddress(address)) {
     throw new Error(`${name} is not a valid Ethereum address`);
   }
   
