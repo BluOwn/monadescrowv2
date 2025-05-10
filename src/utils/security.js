@@ -35,7 +35,7 @@ export const verifyContract = async (provider, contractAddress, contractABI) => 
     const contract = new ethers.Contract(contractAddress, contractABI, provider);
     
     // Verify key functions exist
-    const methods = ['createEscrow', 'releaseFunds', 'getEscrow'];
+    const methods = ['createEscrow', 'releaseFunds', 'getEscrowDetails'];
     for (const method of methods) {
       if (typeof contract[method] !== 'function') {
         throw new Error(`Contract missing required function: ${method}`);
@@ -53,7 +53,13 @@ export const verifyContract = async (provider, contractAddress, contractABI) => 
 export const executeTransactionSecurely = async (contract, method, params = [], value = null) => {
   try {
     // Execute transaction
-    const tx = await contract[method](...params, value ? { value } : {});
+    let tx;
+    
+    if (value) {
+      tx = await contract[method](...params, { value });
+    } else {
+      tx = await contract[method](...params);
+    }
     
     // Wait for confirmation
     const receipt = await tx.wait();
@@ -71,7 +77,7 @@ export const validateAddress = (address, name = 'Address') => {
     throw new Error(`${name} is required`);
   }
   
-  // FIXED: Use ethers.utils.isAddress instead of ethers.isAddress
+  // Fixed: Use ethers.utils.isAddress for ethers v5
   if (!ethers.utils.isAddress(address)) {
     throw new Error(`${name} is not a valid Ethereum address`);
   }
@@ -81,13 +87,13 @@ export const validateAddress = (address, name = 'Address') => {
 
 // Validate amount
 export const validateAmount = (amount) => {
-  if (!amount || isNaN(amount) || Number(amount) <= 0) {
+  if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
     throw new Error('Please enter a valid amount greater than 0');
   }
   
   // Check if amount is not too large
   const maxAmount = 1000; // 1000 MON max for security
-  if (Number(amount) > maxAmount) {
+  if (parseFloat(amount) > maxAmount) {
     throw new Error(`Amount cannot exceed ${maxAmount} MON`);
   }
   
@@ -100,14 +106,18 @@ export const handleError = (error, operation = 'operation') => {
   
   let userMessage = `Failed to ${operation}. `;
   
-  if (error.code === 'ACTION_REJECTED') {
+  if (error.code === 4001) { // MetaMask and other wallets use this code for user rejection
     userMessage += 'Transaction was cancelled by user.';
-  } else if (error.code === 'INSUFFICIENT_FUNDS') {
+  } else if (error.code === 'INSUFFICIENT_FUNDS' || 
+             (error.data && error.data.message && error.data.message.includes('insufficient funds'))) {
     userMessage += 'Insufficient funds for this transaction.';
-  } else if (error.message?.includes('user rejected')) {
+  } else if (error.message?.includes('user rejected') || 
+             error.message?.includes('User denied')) {
     userMessage += 'Transaction was rejected by user.';
   } else if (error.message?.includes('switch to Monad Testnet')) {
     userMessage = error.message;
+  } else if (error.message?.includes('Arbiter address is required')) {
+    userMessage = 'Arbiter address is required. Please enter a valid Ethereum address.';
   } else {
     userMessage += error.message || 'Please try again or contact support.';
   }

@@ -21,7 +21,7 @@ const MessagePanel = ({ escrowId, account, signer, contract }) => {
     const fetchMessages = async () => {
       setLoading(true);
       try {
-        const result = await loadMessages(escrowId);
+        const result = await loadMessages(escrowId, signer?.provider);
         if (result && Array.isArray(result.messages)) {
           setMessages(result.messages);
         } else {
@@ -40,7 +40,7 @@ const MessagePanel = ({ escrowId, account, signer, contract }) => {
     // Set up polling to check for new messages every 30 seconds
     const interval = setInterval(fetchMessages, 30000);
     return () => clearInterval(interval);
-  }, [escrowId]);
+  }, [escrowId, signer]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -52,7 +52,7 @@ const MessagePanel = ({ escrowId, account, signer, contract }) => {
   const handleSendMessage = async (e) => {
     e.preventDefault();
     
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || !signer || !contract) return;
     
     setSending(true);
     setError('');
@@ -61,7 +61,12 @@ const MessagePanel = ({ escrowId, account, signer, contract }) => {
       const result = await sendMessage(escrowId, newMessage, signer, contract);
       
       if (result.success) {
-        setMessages(result.messages);
+        if (Array.isArray(result.messages)) {
+          setMessages(result.messages);
+        } else if (result.messageObject && Array.isArray(result.messageObject.messages)) {
+          setMessages(result.messageObject.messages);
+        }
+        
         setNewMessage('');
       } else {
         setError(`Failed to send message: ${result.error}`);
@@ -112,7 +117,7 @@ const MessagePanel = ({ escrowId, account, signer, contract }) => {
                     <small className="sender fw-bold">
                       {isCurrentUser ? 'You' : truncateAddress(msg.sender)}
                     </small>
-                    <small className="timestamp text-muted" style={{ fontSize: '0.75rem' }}>
+                    <small className="timestamp text-muted" style={{ fontSize: '0.75rem', color: isCurrentUser ? 'rgba(255,255,255,0.7)' : '' }}>
                       {formatMessageDate(msg.timestamp)}
                     </small>
                   </div>
@@ -139,13 +144,13 @@ const MessagePanel = ({ escrowId, account, signer, contract }) => {
             placeholder="Type your message..."
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            disabled={sending}
+            disabled={sending || !signer}
             className="me-2"
           />
           <Button 
             variant="primary" 
             type="submit" 
-            disabled={sending || !newMessage.trim()}
+            disabled={sending || !newMessage.trim() || !signer}
           >
             {sending ? <Spinner animation="border" size="sm" /> : 'Send'}
           </Button>

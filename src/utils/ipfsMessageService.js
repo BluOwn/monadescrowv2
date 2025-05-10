@@ -37,7 +37,7 @@ export const createSignedMessage = async (escrowId, content, signer) => {
   const timestamp = Date.now();
   
   // Create message hash for signing (escrowId + sender + timestamp + content)
-  // Adjusted for ethers v5:
+  // Fixed for ethers v5:
   const messageHash = ethers.utils.solidityKeccak256(
     ['uint256', 'address', 'uint256', 'string'],
     [escrowId, sender, timestamp, content]
@@ -84,7 +84,12 @@ export const isEscrowParticipant = async (escrowId, userAddress, contract) => {
  */
 export const verifyMessage = (message) => {
   try {
-    // Adjusted for ethers v5:
+    // Skip verification for null or invalid messages
+    if (!message || !message.sender || !message.signature || message.escrowId === undefined) {
+      return false;
+    }
+    
+    // Fixed for ethers v5:
     const messageHash = ethers.utils.solidityKeccak256(
       ['uint256', 'address', 'uint256', 'string'],
       [message.escrowId, message.sender, message.timestamp, message.content]
