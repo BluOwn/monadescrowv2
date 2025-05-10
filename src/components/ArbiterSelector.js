@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Form, Button, InputGroup, Spinner } from 'react-bootstrap';
+import { ethers } from 'ethers'; // Added missing import
 
 /**
  * ArbiterSelector component with default arbiter suggestion
