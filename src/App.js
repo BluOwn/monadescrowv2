@@ -3,6 +3,8 @@ import { ethers } from 'ethers';
 import { Button, Card, Container, Form, ListGroup, Nav, Spinner, Alert, Modal, Badge, Tabs, Tab } from 'react-bootstrap';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
+// Import ABI for the EscrowService contract
+import { ESCROW_SERVICE_ABI } from './contracts/EscrowServiceABI';
 
 // Import security utilities and components
 import {
@@ -33,9 +35,6 @@ import DisputeReasonSelector from './components/DisputeReasonSelector';
 // Creator Information
 const CREATOR_WALLET = "0x0b977acab5d9b8f654f48090955f5e00973be0fe";
 const CREATOR_TWITTER = "@Oprimedev";
-
-// ABI for the EscrowService contract
-import { ESCROW_SERVICE_ABI } from './contracts/EscrowServiceABI';
 
 // Helper function to truncate address
 const truncateAddress = (address) => {
@@ -859,7 +858,7 @@ function App() {
         case 'refund':
           tx = await contract.refundBuyer(escrowId);
           break;
-        case 'resolve':
+          case 'resolve':
           if (!recipient) {
             setError('Recipient address is required to resolve a dispute');
             setLoading(false);
