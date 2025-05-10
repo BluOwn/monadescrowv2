@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Form, Spinner } from 'react-bootstrap';
+import { Form, Spinner, Alert } from 'react-bootstrap';
 import { ethers } from 'ethers';
 
 /**
- * TokenSelector component for selecting ERC-20 tokens from a list
+ * Enhanced TokenSelector component for selecting ERC-20 tokens
  * 
  * @param {Object} props Component props
  * @param {Array} props.tokens List of token objects
@@ -11,16 +11,19 @@ import { ethers } from 'ethers';
  * @param {Object} props.selectedToken Currently selected token
  * @param {boolean} props.loading Whether tokens are loading
  * @param {boolean} props.disabled Whether the selector is disabled
+ * @param {ethers.providers.Provider} props.provider Ethers provider for fetching token details
  */
 const TokenSelector = ({ 
   tokens, 
   onSelect, 
   selectedToken, 
   loading = false,
-  disabled = false
+  disabled = false,
+  provider
 }) => {
-  const [allowance, setAllowance] = useState('0');
-  const [balance, setBalance] = useState('0');
+  const [enhancedTokens, setEnhancedTokens] = useState([]);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [error, setError] = useState('');
 
   // Format address for display
   const formatAddress = (address) => {
@@ -31,52 +34,145 @@ const TokenSelector = ({
   // Handle token selection
   const handleTokenChange = (e) => {
     const tokenAddress = e.target.value;
-    const token = tokens.find(token => token.address === tokenAddress);
+    const token = enhancedTokens.find(token => token.address === tokenAddress);
     if (token && onSelect) {
       onSelect(token);
     }
   };
 
+  // Fetch token details for all tokens in the list
+  useEffect(() => {
+    const fetchTokenDetails = async () => {
+      if (!tokens || tokens.length === 0 || !provider) {
+        return;
+      }
+
+      setLoadingDetails(true);
+      setError('');
+
+      try {
+        const enhanced = await Promise.all(tokens.map(async (token) => {
+          // Skip if token is already enhanced or is native token
+          if (token.name && token.symbol && token.decimals) {
+            return token;
+          }
+
+          if (token.address === ethers.constants.AddressZero || token.isNative) {
+            return {
+              address: ethers.constants.AddressZero,
+              name: 'Monad Native Token',
+              symbol: 'MON',
+              decimals: 18,
+              isNative: true
+            };
+          }
+
+          try {
+            // Create token contract
+            const tokenContract = new ethers.Contract(
+              token.address,
+              [
+                'function name() view returns (string)',
+                'function symbol() view returns (string)',
+                'function decimals() view returns (uint8)'
+              ],
+              provider
+            );
+
+            // Fetch token details
+            const [name, symbol, decimals] = await Promise.all([
+              tokenContract.name().catch(() => 'Unknown Token'),
+              tokenContract.symbol().catch(() => 'UNKNOWN'),
+              tokenContract.decimals().catch(() => 18)
+            ]);
+
+            return {
+              ...token,
+              name,
+              symbol,
+              decimals,
+              isNative: false
+            };
+          } catch (err) {
+            console.warn(`Error fetching details for token ${token.address}:`, err);
+            return {
+              ...token,
+              name: `Token at ${formatAddress(token.address)}`,
+              symbol: 'UNKNOWN',
+              decimals: 18,
+              isNative: false
+            };
+          }
+        }));
+
+        setEnhancedTokens(enhanced);
+      } catch (err) {
+        console.error('Error enhancing tokens:', err);
+        setError('Failed to load token details');
+        setEnhancedTokens(tokens);
+      } finally {
+        setLoadingDetails(false);
+      }
+    };
+
+    fetchTokenDetails();
+  }, [tokens, provider]);
+
+  // Sort tokens - native token first, then alphabetically by symbol
+  const sortedTokens = [...enhancedTokens].sort((a, b) => {
+    if (a.isNative) return -1;
+    if (b.isNative) return 1;
+    return a.symbol.localeCompare(b.symbol);
+  });
+
   return (
-    <Form.Group className="mb-3">
-      <Form.Label>Select Token</Form.Label>
-      <Form.Select
-        value={selectedToken?.address || ''}
-        onChange={handleTokenChange}
-        disabled={loading || disabled || tokens.length === 0}
-      >
-        {loading ? (
-          <option>Loading tokens...</option>
-        ) : tokens.length === 0 ? (
-          <option>No tokens available</option>
-        ) : (
-          <>
-            <option value="">Select a token</option>
-            {tokens.map(token => (
-              <option key={token.address} value={token.address}>
-                {token.symbol} - {token.name} {token.isNative ? '(Native)' : `(${formatAddress(token.address)})`}
-              </option>
-            ))}
-          </>
-        )}
-      </Form.Select>
-
-      {loading && (
-        <div className="text-center my-2">
-          <Spinner animation="border" size="sm" /> Loading tokens...
-        </div>
+    <div className="token-selector">
+      {error && (
+        <Alert variant="warning" className="mb-2">
+          {error}
+        </Alert>
       )}
 
-      {selectedToken && (
-        <div className="token-info mt-2 p-2 bg-light rounded">
-          <p className="mb-1"><strong>Token:</strong> {selectedToken.symbol} ({selectedToken.name})</p>
-          {!selectedToken.isNative && (
-            <p className="mb-1"><strong>Address:</strong> {formatAddress(selectedToken.address)}</p>
+      <Form.Group className="mb-3">
+        <Form.Label>Select Token</Form.Label>
+        <Form.Select
+          value={selectedToken?.address || ''}
+          onChange={handleTokenChange}
+          disabled={loading || loadingDetails || disabled || sortedTokens.length === 0}
+        >
+          {loading || loadingDetails ? (
+            <option>Loading tokens...</option>
+          ) : sortedTokens.length === 0 ? (
+            <option>No tokens available</option>
+          ) : (
+            <>
+              <option value="">Select a token</option>
+              {sortedTokens.map(token => (
+                <option key={token.address} value={token.address}>
+                  {token.symbol} - {token.name} {token.isNative ? '(Native)' : `(${formatAddress(token.address)})`}
+                </option>
+              ))}
+            </>
           )}
-          <p className="mb-0"><strong>Type:</strong> {selectedToken.isNative ? 'Native Chain Token' : 'ERC-20 Token'}</p>
-        </div>
-      )}
-    </Form.Group>
+        </Form.Select>
+
+        {(loading || loadingDetails) && (
+          <div className="text-center my-2">
+            <Spinner animation="border" size="sm" /> Loading tokens...
+          </div>
+        )}
+
+        {selectedToken && (
+          <div className="token-info mt-2 p-2 bg-light rounded">
+            <p className="mb-1"><strong>Token:</strong> {selectedToken.symbol} ({selectedToken.name})</p>
+            {!selectedToken.isNative && (
+              <p className="mb-1"><strong>Address:</strong> {formatAddress(selectedToken.address)}</p>
+            )}
+            <p className="mb-0"><strong>Type:</strong> {selectedToken.isNative ? 'Native Chain Token' : 'ERC-20 Token'}</p>
+          </div>
+        )}
+      </Form.Group>
+    </div>
   );
 };
 

@@ -29,6 +29,7 @@ import {
 import MessagePanel from './components/MessagePanel';
 import ContactForm from './components/ContactForm';
 import TokenSelector from './components/TokenSelector';
+import ArbiterSelector from './components/ArbiterSelector';
 import DocumentUploader from './components/DocumentUploader';
 import DisputeReasonSelector from './components/DisputeReasonSelector';
 
@@ -630,6 +631,10 @@ function App() {
       
       let tx;
       
+      // Using empty strings for description and documentHash fields
+      const description = "";
+      const documentHash = "";
+      
       if (useToken && selectedToken && !selectedToken.isNative) {
         // ERC20 token escrow
         const tokenAddress = selectedToken.address;
@@ -651,8 +656,8 @@ function App() {
           arbiterAddress,
           tokenAddress,
           amountInTokenUnits,
-          description, // Description field
-          documentHash // Document hash field
+          description, // Empty description field
+          documentHash // Empty document hash field
         );
       } else {
         // Native currency escrow
@@ -661,8 +666,8 @@ function App() {
         tx = await contract.createEscrow(
           sellerAddress, 
           arbiterAddress,
-          description, // Description field
-          documentHash, // Document hash field
+          description, // Empty description field
+          documentHash, // Empty document hash field
           { value: amountInWei }
         );
       }
@@ -687,8 +692,6 @@ function App() {
       setSellerAddress('');
       setArbiterAddress('');
       setAmount('');
-      setDescription('');
-      setDocumentHash('');
       setUseToken(false);
       setSelectedToken(supportedTokens.find(t => t.isNative) || null);
       
@@ -825,7 +828,7 @@ function App() {
       
       const receipt = await tx.wait();
       
-      setSuccessMessage(`Dispute raised successfully! Transaction hash: ${receipt.transactionHash}`);
+      setSuccessMessage(`Dispute raised successfully! Transaction hash:(filesize: 0): Transaction hash: ${receipt.transactionHash}`);
       setShowDisputeModal(false);
       
       // Reload escrows and update details if modal is open
@@ -858,7 +861,7 @@ function App() {
         case 'refund':
           tx = await contract.refundBuyer(escrowId);
           break;
-          case 'resolve':
+        case 'resolve':
           if (!recipient) {
             setError('Recipient address is required to resolve a dispute');
             setLoading(false);
@@ -1201,23 +1204,12 @@ function App() {
                         </Form.Text>
                       </Form.Group>
                       
-                      {/* Arbiter Address Field */}
-                      <Form.Group className="mb-3">
-                        <Form.Label style={{ fontWeight: 'bold', color: '#6c5ce7' }}>
-                          Arbiter Address (Required)
-                        </Form.Label>
-                        <Form.Control
-                          type="text"
-                          placeholder="0x..."
-                          value={arbiterAddress}
-                          onChange={(e) => setArbiterAddress(e.target.value)}
-                          required
-                          style={{ borderColor: '#6c5ce7', borderWidth: '2px' }}
-                        />
-                        <Form.Text className="text-muted">
-                          A trusted third party who can resolve disputes and refund funds if needed
-                        </Form.Text>
-                      </Form.Group>
+                      {/* New Arbiter Selector Component */}
+                      <ArbiterSelector 
+                        value={arbiterAddress}
+                        onChange={setArbiterAddress}
+                        contract={contract}
+                      />
                       
                       {/* Token Selection */}
                       <Form.Group className="mb-3">
@@ -1231,32 +1223,13 @@ function App() {
                       </Form.Group>
                       
                       {useToken && (
-                        <Form.Group className="mb-3">
-                          <Form.Label>Select Token</Form.Label>
-                          <Form.Select
-                            value={selectedToken?.address || ''}
-                            onChange={(e) => {
-                              const token = supportedTokens.find(t => t.address === e.target.value);
-                              handleTokenSelect(token);
-                            }}
-                            disabled={loadingTokens}
-                          >
-                            {loadingTokens ? (
-                              <option>Loading tokens...</option>
-                            ) : (
-                              supportedTokens
-                                .filter(token => !token.isNative) // Filter out native token
-                                .map(token => (
-                                  <option key={token.address} value={token.address}>
-                                    {token.symbol} - {token.name}
-                                  </option>
-                                ))
-                            )}
-                          </Form.Select>
-                          <Form.Text className="text-muted">
-                            Select the ERC-20 token you want to use
-                          </Form.Text>
-                        </Form.Group>
+                        <TokenSelector
+                          tokens={supportedTokens}
+                          onSelect={handleTokenSelect}
+                          selectedToken={selectedToken}
+                          loading={loadingTokens}
+                          provider={provider}
+                        />
                       )}
                       
                       <Form.Group className="mb-3">
@@ -1278,34 +1251,7 @@ function App() {
                         </Form.Text>
                       </Form.Group>
                       
-                      {/* Description Field */}
-                      <Form.Group className="mb-3">
-                        <Form.Label>Description (Optional)</Form.Label>
-                        <Form.Control
-                          as="textarea"
-                          rows={3}
-                          placeholder="Describe the purpose of this escrow..."
-                          value={description}
-                          onChange={(e) => setDescription(e.target.value)}
-                        />
-                        <Form.Text className="text-muted">
-                          Provide details about the goods or services being exchanged
-                        </Form.Text>
-                      </Form.Group>
-                      
-                      {/* Document Hash Field */}
-                      <Form.Group className="mb-3">
-                        <Form.Label>Document Hash (Optional)</Form.Label>
-                        <Form.Control
-                          type="text"
-                          placeholder="QmHash..."
-                          value={documentHash}
-                          onChange={(e) => setDocumentHash(e.target.value)}
-                        />
-                        <Form.Text className="text-muted">
-                          Add an IPFS hash or other document reference
-                        </Form.Text>
-                      </Form.Group>
+                      {/* Description and Document Hash fields removed */}
                       
                       <Button 
                         variant="primary" 
@@ -1627,7 +1573,7 @@ function App() {
                         
                         {/* Seller Actions */}
                         {account.toLowerCase() === selectedEscrow.seller.toLowerCase() && 
-                         !selectedEscrow.disputeRaised && (
+                         !selectedEscrow.disputeSometimesRaised && (
                           <Button 
                             variant="warning" 
                             size="sm" 
