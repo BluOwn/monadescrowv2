@@ -64,13 +64,35 @@ export const createSignedMessage = async (escrowId, content, signer) => {
  */
 export const isEscrowParticipant = async (escrowId, userAddress, contract) => {
   try {
-    const escrow = await contract.getEscrowDetails(escrowId);
+    // Make sure userAddress isn't null or undefined
+    if (!userAddress) {
+      console.error("User address is null or undefined");
+      return false;
+    }
     
-    return (
-      userAddress.toLowerCase() === escrow[0].toLowerCase() || // buyer
-      userAddress.toLowerCase() === escrow[1].toLowerCase() || // seller
-      userAddress.toLowerCase() === escrow[2].toLowerCase()    // arbiter
-    );
+    console.log(`Checking if ${userAddress} is participant in escrow ${escrowId}`);
+    
+    // Get escrow details
+    const details = await contract.getEscrowDetails(escrowId);
+    
+    // Normalize addresses to lowercase for comparison
+    const normalizedUserAddress = userAddress.toLowerCase();
+    const buyer = details[0].toLowerCase();
+    const seller = details[1].toLowerCase();
+    const arbiter = details[2].toLowerCase();
+    
+    // Log the addresses for debugging
+    console.log(`Escrow participants: Buyer=${buyer}, Seller=${seller}, Arbiter=${arbiter}`);
+    console.log(`Checking against user: ${normalizedUserAddress}`);
+    
+    // Check if user is buyer, seller, or arbiter
+    const isBuyer = normalizedUserAddress === buyer;
+    const isSeller = normalizedUserAddress === seller;
+    const isArbiter = normalizedUserAddress === arbiter;
+    
+    console.log(`Is buyer: ${isBuyer}, Is seller: ${isSeller}, Is arbiter: ${isArbiter}`);
+    
+    return isBuyer || isSeller || isArbiter;
   } catch (error) {
     console.error("Error verifying participant:", error);
     return false;
@@ -145,7 +167,7 @@ export const pinJSONToPinata = async (jsonData) => {
 };
 
 /**
- * Send a message toan escrow
+ * Send a message to an escrow
  * @param {string} escrowId - Escrow ID
  * @param {string} content - Message content
  * @param {ethers.Signer} signer - Ethers signer for the current user
@@ -155,18 +177,36 @@ export const pinJSONToPinata = async (jsonData) => {
 export const sendMessage = async (escrowId, content, signer, contract) => {
   try {
     const userAddress = await signer.getAddress();
+    console.log(`Sending message for escrow ${escrowId} from user ${userAddress}`);
     
-    // Verify the user is a participant
-    const isParticipant = await isEscrowParticipant(escrowId, userAddress, contract);
-    if (!isParticipant) {
-      throw new Error("Only escrow participants can send messages");
+    // Get escrow details to identify roles
+    const details = await contract.getEscrowDetails(escrowId);
+    const buyer = details[0].toLowerCase();
+    const seller = details[1].toLowerCase();
+    const arbiter = details[2].toLowerCase();
+    
+    console.log(`Escrow roles: Buyer=${buyer}, Seller=${seller}, Arbiter=${arbiter}`);
+    console.log(`Current user: ${userAddress.toLowerCase()}`);
+    
+    // Explicitly check each role
+    const isBuyer = userAddress.toLowerCase() === buyer;
+    const isSeller = userAddress.toLowerCase() === seller;
+    const isArbiter = userAddress.toLowerCase() === arbiter;
+    
+    console.log(`Is buyer: ${isBuyer}, Is seller: ${isSeller}, Is arbiter: ${isArbiter}`);
+    
+    // Verify the user is a participant (buyer, seller, or arbiter)
+    if (!isBuyer && !isSeller && !isArbiter) {
+      throw new Error("Only escrow participants (buyer, seller, or arbiter) can send messages");
     }
     
-    // Load existing messages (use signer as provider for on-chain registry)
+    // Load existing messages
     const { messages = [] } = await loadMessages(escrowId, signer.provider);
+    console.log(`Loaded ${messages.length} existing messages`);
     
     // Create new signed message
     const newMessage = await createSignedMessage(escrowId, content, signer);
+    console.log('Created signed message:', newMessage);
     
     // Add new message to the array
     messages.push(newMessage);
@@ -215,6 +255,7 @@ export const sendMessage = async (escrowId, content, signer, contract) => {
     // Upload to IPFS via Pinata
     try {
       const cid = await pinJSONToPinata(pinataData);
+      console.log(`Successfully pinned to IPFS with CID: ${cid}`);
       
       // Store CID in local storage
       localStorage.setItem(`${MESSAGE_CID_PREFIX}${escrowId}`, cid);
