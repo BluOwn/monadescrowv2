@@ -1025,7 +1025,7 @@ function App() {
     // Don't connect wallet if user declines
   };
 
-  // Load user's escrows with retry logic
+  // FIXED: Load user's escrows with retry logic
   const loadUserEscrows = async (escrowContract, userAddress, maxRetries = 3) => {
     let retries = 0;
     setLoadingEscrows(true);
@@ -1042,24 +1042,33 @@ function App() {
           throw new Error('Contract not properly initialized');
         }
         
-        // Verify the contract has the function we need
-        const escrowIds = await escrowContract.getUserEscrows(userAddress);
+        // FIXED: Make sure to pass all required parameters to getUserEscrows - address, offset, limit
+        const offset = 0;
+        const limit = 100;
+        const result = await escrowContract.getUserEscrows(userAddress, offset, limit);
+        
+        // getUserEscrows returns an array of escrow IDs
+        const escrowIds = result[0]; // The first element is the array of IDs
         
         const escrowDetails = [];
         for (let i = 0; i < escrowIds.length; i++) {
           try {
             const escrowId = escrowIds[i];
-            const details = await escrowContract.getEscrow(escrowId);
+            // Getting details for each escrow
+            const details = await escrowContract.getEscrowDetails(escrowId);
             
             escrowDetails.push({
               id: escrowId,
               buyer: details[0],
               seller: details[1],
               arbiter: details[2],
-              // FIXED: Use ethers.utils.formatEther
-              amount: ethers.utils.formatEther(details[3]),
-              fundsDisbursed: details[4],
-              disputeRaised: details[5]
+              tokenAddress: details[3],
+              amount: ethers.utils.formatEther(details[4]), // Amount is at index 4
+              creationTime: details[5] ? new Date(details[5].toNumber() * 1000).toLocaleString() : 'Unknown',
+              fundsDisbursed: details[6],
+              disputeRaised: details[7],
+              description: details[8] || '',
+              documentHash: details[9] || ''
             });
           } catch (innerError) {
             console.warn(`Error loading escrow ${escrowIds[i]}:`, innerError);
@@ -1113,7 +1122,7 @@ function App() {
         // This is a simple approach - in a production app you might want to use events or indexing
         for (let i = 0; i < escrowCount; i++) {
           try {
-            const details = await escrowContract.getEscrow(i);
+            const details = await escrowContract.getEscrowDetails(i);
             
             // Check if the user is the arbiter for this escrow
             if (details[2].toLowerCase() === arbiterAddress.toLowerCase()) {
@@ -1122,10 +1131,13 @@ function App() {
                 buyer: details[0],
                 seller: details[1],
                 arbiter: details[2],
-                // FIXED: Use ethers.utils.formatEther
-                amount: ethers.utils.formatEther(details[3]),
-                fundsDisbursed: details[4],
-                disputeRaised: details[5]
+                tokenAddress: details[3],
+                amount: ethers.utils.formatEther(details[4]), // Amount is at index 4
+                creationTime: details[5] ? new Date(details[5].toNumber() * 1000).toLocaleString() : 'Unknown',
+                fundsDisbursed: details[6],
+                disputeRaised: details[7],
+                description: details[8] || '',
+                documentHash: details[9] || ''
               });
             }
           } catch (err) {
@@ -1155,14 +1167,22 @@ function App() {
     }
   };
 
-  // Create new escrow
+  // FIXED: Create new escrow
   const handleCreateEscrow = async (e) => {
     e.preventDefault();
     
     try {
-      // Validate inputs
+      // Validate inputs with clear error messages
+      if (!sellerAddress) {
+        throw new Error('Seller address is required');
+      }
       validateAddress(sellerAddress, 'Seller address');
+      
+      if (!arbiterAddress) {
+        throw new Error('Arbiter address is required');
+      }
       validateAddress(arbiterAddress, 'Arbiter address');
+      
       validateAmount(amount);
       
       // Check that addresses are different
@@ -1179,28 +1199,50 @@ function App() {
       setLoading(true);
       setError('');
       
-      // FIXED: Use ethers.utils.parseEther
+      // Parse amount to wei
       const amountInWei = ethers.utils.parseEther(amount);
       
-      // Use secure transaction execution
-      const receipt = await executeTransactionSecurely(
-        contract,
-        'createEscrow',
-        [sellerAddress, arbiterAddress],
-        amountInWei
+      // Log parameters for debugging
+      console.log('Creating escrow with params:', {
+        seller: sellerAddress,
+        arbiter: arbiterAddress,
+        amount: amountInWei.toString()
+      });
+      
+      // Add description and document hash parameters (empty strings for now)
+      const description = ""; // Optional description
+      const documentHash = ""; // Optional document hash
+      
+      // Call contract method directly to avoid problems with the utility function
+      const tx = await contract.createEscrow(
+        sellerAddress, 
+        arbiterAddress,
+        description,
+        documentHash,
+        { value: amountInWei }
       );
       
-      setSuccessMessage(`Escrow created successfully! Transaction hash: ${receipt.hash}`);
+      // Wait for confirmation
+      const receipt = await tx.wait();
+      
+      setSuccessMessage(`Escrow created successfully! Transaction hash: ${receipt.transactionHash}`);
       setSellerAddress('');
       setArbiterAddress('');
       setAmount('');
       
-      // Reload escrows
-      await loadUserEscrows(contract, account);
-      await loadArbitratedEscrows(contract, account);
+      // Reload escrows after a short delay
+      setTimeout(async () => {
+        try {
+          await loadUserEscrows(contract, account);
+          await loadArbitratedEscrows(contract, account);
+        } catch (err) {
+          console.error('Error reloading escrows:', err);
+        }
+      }, 2000);
     } catch (error) {
-      console.error("Error creating escrow", error);
-      setError(handleError(error, 'create escrow'));
+      console.error("Error creating escrow:", error);
+      // Show user-friendly error message
+      setError(typeof error === 'string' ? error : (error.message || 'Failed to create escrow'));
     } finally {
       setLoading(false);
     }
@@ -1212,16 +1254,19 @@ function App() {
       setLoading(true);
       setError('');
       
-      const details = await contract.getEscrow(escrowId);
+      const details = await contract.getEscrowDetails(escrowId);
       const escrow = {
         id: escrowId,
         buyer: details[0],
         seller: details[1],
         arbiter: details[2],
-        // FIXED: Use ethers.utils.formatEther
-        amount: ethers.utils.formatEther(details[3]),
-        fundsDisbursed: details[4],
-        disputeRaised: details[5]
+        tokenAddress: details[3],
+        amount: ethers.utils.formatEther(details[4]),
+        creationTime: details[5] ? new Date(details[5].toNumber() * 1000).toLocaleString() : 'Unknown',
+        fundsDisbursed: details[6],
+        disputeRaised: details[7],
+        description: details[8] || '',
+        documentHash: details[9] || ''
       };
       
       setSelectedEscrow(escrow);
@@ -1240,17 +1285,18 @@ function App() {
       setLoading(true);
       setError('');
       
-      let receipt;
+      let tx;
       
       switch (action) {
         case 'release':
-          receipt = await executeTransactionSecurely(contract, 'releaseFunds', [escrowId]);
+          tx = await contract.releaseFunds(escrowId);
           break;
         case 'refund':
-          receipt = await executeTransactionSecurely(contract, 'refundBuyer', [escrowId]);
+          tx = await contract.refundBuyer(escrowId);
           break;
         case 'dispute':
-          receipt = await executeTransactionSecurely(contract, 'raiseDispute', [escrowId]);
+          // Default reason is 1 (general dispute), description is empty string
+          tx = await contract.raiseDispute(escrowId, 1, "");
           break;
         case 'resolve':
           if (!recipient) {
@@ -1259,7 +1305,7 @@ function App() {
             return;
           }
           validateAddress(recipient, 'Recipient');
-          receipt = await executeTransactionSecurely(contract, 'resolveDispute', [escrowId, recipient]);
+          tx = await contract.resolveDispute(escrowId, recipient);
           break;
         default:
           setError('Invalid action');
@@ -1267,7 +1313,10 @@ function App() {
           return;
       }
       
-      setSuccessMessage(`Action ${action} executed successfully! Transaction hash: ${receipt.hash}`);
+      // Wait for confirmation
+      const receipt = await tx.wait();
+      
+      setSuccessMessage(`Action ${action} executed successfully! Transaction hash: ${receipt.transactionHash}`);
       
       // Reload escrows
       await loadUserEscrows(contract, account);
@@ -1447,6 +1496,24 @@ function App() {
                         value={sellerAddress}
                         onChange={(e) => setSellerAddress(e.target.value)}
                         required
+                      />
+                      <Form.Text className="text-muted">
+                        The address that will receive funds when released
+                      </Form.Text>
+                    </Form.Group>
+                    
+                    {/* IMPORTANT: Arbiter Address Field - Required */}
+                    <Form.Group className="mb-3">
+                      <Form.Label style={{ fontWeight: 'bold', color: '#6c5ce7' }}>
+                        Arbiter Address (Required)
+                      </Form.Label>
+                      <Form.Control
+                        type="text"
+                        placeholder="0x..."
+                        value={arbiterAddress}
+                        onChange={(e) => setArbiterAddress(e.target.value)}
+                        required
+                        style={{ borderColor: '#6c5ce7', borderWidth: '2px' }}
                       />
                       <Form.Text className="text-muted">
                         A trusted third party who can resolve disputes and refund funds if needed
@@ -1687,6 +1754,7 @@ function App() {
                     <p><strong>Seller:</strong> <span className="address-display">{selectedEscrow.seller}</span></p>
                     <p><strong>Arbiter:</strong> <span className="address-display">{selectedEscrow.arbiter}</span></p>
                     <p><strong>Amount:</strong> {selectedEscrow.amount} MON</p>
+                    <p><strong>Created:</strong> {selectedEscrow.creationTime}</p>
                     <p>
                       <strong>Status:</strong>{' '}
                       <span 
@@ -1855,4 +1923,4 @@ function App() {
   );
 }
 
-export default App;                      
+export default App;

@@ -49,14 +49,15 @@ export const verifyContract = async (provider, contractAddress, contractABI) => 
   }
 };
 
-// Execute transaction securely
+// Execute transaction securely - FIXED version
 export const executeTransactionSecurely = async (contract, method, params = [], value = null) => {
   try {
     // Execute transaction
     let tx;
     
     if (value) {
-      tx = await contract[method](...params, { value });
+      // Make sure value is properly formatted as an object
+      tx = await contract[method](...params, { value: value });
     } else {
       tx = await contract[method](...params);
     }
@@ -66,7 +67,13 @@ export const executeTransactionSecurely = async (contract, method, params = [], 
     
     return receipt;
   } catch (error) {
-    console.error('Transaction failed:', error);
+    console.error(`Transaction failed for method ${method}:`, error);
+    
+    // Improved error handling for common contract errors
+    if (error.reason) {
+      throw new Error(`Contract error: ${error.reason}`);
+    }
+    
     throw error;
   }
 };

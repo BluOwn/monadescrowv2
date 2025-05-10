@@ -145,7 +145,7 @@ export const pinJSONToPinata = async (jsonData) => {
 };
 
 /**
- * Send a message to an escrow
+ * Send a message toan escrow
  * @param {string} escrowId - Escrow ID
  * @param {string} content - Message content
  * @param {ethers.Signer} signer - Ethers signer for the current user
