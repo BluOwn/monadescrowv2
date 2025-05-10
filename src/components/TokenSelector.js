@@ -2,6 +2,40 @@ import React, { useState, useEffect } from 'react';
 import { Form, Spinner, Alert } from 'react-bootstrap';
 import { ethers } from 'ethers';
 
+// Known token information for Monad Testnet
+const KNOWN_TOKENS = {
+  '0xf817257fed379853cDe0fa4F97AB987181B1E5Ea': {
+    name: 'USD Coin',
+    symbol: 'USDC',
+    decimals: 6,
+    isNative: false
+  },
+  '0x88b8E2161DEDC77EF4ab7585569D2415a1C1055D': {
+    name: 'Tether USD',
+    symbol: 'USDT',
+    decimals: 6,
+    isNative: false
+  },
+  '0xcf5a6076cfa32686c0Df13aBaDa2b40dec133F1d': {
+    name: 'Wrapped Bitcoin',
+    symbol: 'WBTC',
+    decimals: 8,
+    isNative: false
+  },
+  '0xB5a30b0FDc5EA94A52fDc42e3E9760Cb8449Fb37': {
+    name: 'Wrapped Ether',
+    symbol: 'WETH',
+    decimals: 18,
+    isNative: false
+  },
+  '0x5387C85A4965769f6B0Df430638a1388493486F1': {
+    name: 'Wrapped SOL',
+    symbol: 'WSOL',
+    decimals: 9,
+    isNative: false
+  }
+};
+
 /**
  * Enhanced TokenSelector component for selecting ERC-20 tokens
  * 
@@ -43,7 +77,7 @@ const TokenSelector = ({
   // Fetch token details for all tokens in the list
   useEffect(() => {
     const fetchTokenDetails = async () => {
-      if (!tokens || tokens.length === 0 || !provider) {
+      if (!tokens || tokens.length === 0) {
         return;
       }
 
@@ -67,42 +101,56 @@ const TokenSelector = ({
             };
           }
 
-          try {
-            // Create token contract
-            const tokenContract = new ethers.Contract(
-              token.address,
-              [
-                'function name() view returns (string)',
-                'function symbol() view returns (string)',
-                'function decimals() view returns (uint8)'
-              ],
-              provider
-            );
-
-            // Fetch token details
-            const [name, symbol, decimals] = await Promise.all([
-              tokenContract.name().catch(() => 'Unknown Token'),
-              tokenContract.symbol().catch(() => 'UNKNOWN'),
-              tokenContract.decimals().catch(() => 18)
-            ]);
-
+          // Check if it's a known token from our predefined list
+          if (KNOWN_TOKENS[token.address]) {
             return {
               ...token,
-              name,
-              symbol,
-              decimals,
-              isNative: false
-            };
-          } catch (err) {
-            console.warn(`Error fetching details for token ${token.address}:`, err);
-            return {
-              ...token,
-              name: `Token at ${formatAddress(token.address)}`,
-              symbol: 'UNKNOWN',
-              decimals: 18,
-              isNative: false
+              ...KNOWN_TOKENS[token.address],
+              address: token.address
             };
           }
+
+          // If it's not a known token and we have a provider, try to fetch details
+          if (provider) {
+            try {
+              // Create token contract
+              const tokenContract = new ethers.Contract(
+                token.address,
+                [
+                  'function name() view returns (string)',
+                  'function symbol() view returns (string)',
+                  'function decimals() view returns (uint8)'
+                ],
+                provider
+              );
+
+              // Fetch token details
+              const [name, symbol, decimals] = await Promise.all([
+                tokenContract.name().catch(() => 'Unknown Token'),
+                tokenContract.symbol().catch(() => 'UNKNOWN'),
+                tokenContract.decimals().catch(() => 18)
+              ]);
+
+              return {
+                ...token,
+                name,
+                symbol,
+                decimals,
+                isNative: false
+              };
+            } catch (err) {
+              console.warn(`Error fetching details for token ${token.address}:`, err);
+            }
+          }
+
+          // Fallback if contract call fails or no provider
+          return {
+            ...token,
+            name: `Token at ${formatAddress(token.address)}`,
+            symbol: 'UNKNOWN',
+            decimals: 18,
+            isNative: false
+          };
         }));
 
         setEnhancedTokens(enhanced);

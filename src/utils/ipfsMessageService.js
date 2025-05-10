@@ -1,6 +1,4 @@
 import { ethers } from 'ethers';
-// We'll use fetch instead of axios
-// import axios from 'axios';
 import { updateMessageCidOnChain, getMessageCidFromChain } from './registryIntegration';
 
 // Configuration for Pinata
@@ -8,8 +6,9 @@ const PINATA_API_KEY = '17913b5e655bd05ad05c';  // Replace with your Pinata API 
 const PINATA_API_SECRET = '86f08ecea9882b3744a52f95ecfa22b6ef9eee16804de357f4fba4524440d1f3';  // Replace with your Pinata API secret
 const PINATA_JWT = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySW5mb3JtYXRpb24iOnsiaWQiOiI1ZTM1Y2FjYS1jZmVmLTRhZmMtYmMyYS0xM2U2MzBhNWNkZmYiLCJlbWFpbCI6InRlYmEuNzQxQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJwaW5fcG9saWN5Ijp7InJlZ2lvbnMiOlt7ImRlc2lyZWRSZXBsaWNhdGlvbkNvdW50IjoxLCJpZCI6IkZSQTEifSx7ImRlc2lyZWRSZXBsaWNhdGlvbkNvdW50IjoxLCJpZCI6Ik5ZQzEifV0sInZlcnNpb24iOjF9LCJtZmFfZW5hYmxlZCI6ZmFsc2UsInN0YXR1cyI6IkFDVElWRSJ9LCJhdXRoZW50aWNhdGlvblR5cGUiOiJzY29wZWRLZXkiLCJzY29wZWRLZXlLZXkiOiIxNzkxM2I1ZTY1NWJkMDVhZDA1YyIsInNjb3BlZEtleVNlY3JldCI6Ijg2ZjA4ZWNlYTk4ODJiMzc0NGE1MmY5NWVjZmEyMmI2ZWY5ZWVlMTY4MDRkZTM1N2Y0ZmJhNDUyNDQ0MGQxZjMiLCJleHAiOjE3Nzc1NjQ3MzV9.RKO5PaTIPkySTTLk3ep0I6HzuLeRq3a6RiIr72Pjl6Q';  // Optional: Replace with your Pinata JWT if you prefer using JWT
 
-// Cache message CIDs in localStorage with a prefix
-const MESSAGE_CID_PREFIX = 'escrow_msg_cid_';
+// Cache keys in localStorage 
+const MESSAGE_CID_PREFIX = 'escrow_msg_cid_';  // For message CIDs
+const MESSAGE_CONTENT_PREFIX = 'escrow_msg_content_';  // For message content
 
 // Flag to determine if we should use on-chain registry
 const USE_ONCHAIN_REGISTRY = false; // Set to true if you deploy the registry contract
@@ -167,6 +166,49 @@ export const pinJSONToPinata = async (jsonData) => {
 };
 
 /**
+ * Get shared storage key for an escrow
+ * This ensures all participants use the same key regardless of which one wrote the message
+ * @param {string} escrowId - Escrow ID
+ * @returns {string} - Storage key
+ */
+const getSharedStorageKey = (escrowId) => {
+  return `${MESSAGE_CONTENT_PREFIX}${escrowId}`;
+};
+
+/**
+ * Store messages locally
+ * @param {string} escrowId - Escrow ID
+ * @param {Array} messages - Messages array
+ */
+const storeMessagesLocally = (escrowId, messages) => {
+  const storageKey = getSharedStorageKey(escrowId);
+  const messageObject = {
+    escrowId,
+    lastUpdated: Date.now(),
+    messages
+  };
+  localStorage.setItem(storageKey, JSON.stringify(messageObject));
+};
+
+/**
+ * Load messages from local storage
+ * @param {string} escrowId - Escrow ID
+ * @returns {Object} - Message object or null
+ */
+const loadMessagesLocally = (escrowId) => {
+  const storageKey = getSharedStorageKey(escrowId);
+  const data = localStorage.getItem(storageKey);
+  if (data) {
+    try {
+      return JSON.parse(data);
+    } catch (error) {
+      console.error('Error parsing stored messages:', error);
+    }
+  }
+  return null;
+};
+
+/**
  * Send a message to an escrow
  * @param {string} escrowId - Escrow ID
  * @param {string} content - Message content
@@ -200,8 +242,15 @@ export const sendMessage = async (escrowId, content, signer, contract) => {
       throw new Error("Only escrow participants (buyer, seller, or arbiter) can send messages");
     }
     
-    // Load existing messages
-    const { messages = [] } = await loadMessages(escrowId, signer.provider);
+    // Load existing messages - FIRST try local storage for fresh messages
+    let messageData = loadMessagesLocally(escrowId);
+    
+    // If not in local storage, try the traditional IPFS approach
+    if (!messageData) {
+      messageData = await loadMessages(escrowId, signer.provider);
+    }
+    
+    const messages = messageData?.messages || [];
     console.log(`Loaded ${messages.length} existing messages`);
     
     // Create new signed message
@@ -217,6 +266,9 @@ export const sendMessage = async (escrowId, content, signer, contract) => {
       lastUpdated: Date.now(),
       messages
     };
+    
+    // IMMEDIATELY save to local storage for instant sync between users
+    storeMessagesLocally(escrowId, messages);
     
     // Add optional metadata for Pinata
     const pinataMetadata = {
@@ -242,7 +294,6 @@ export const sendMessage = async (escrowId, content, signer, contract) => {
       console.log('Development mode: storing messages in local storage only');
       const mockCid = `local-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
       localStorage.setItem(`${MESSAGE_CID_PREFIX}${escrowId}`, mockCid);
-      localStorage.setItem(mockCid, JSON.stringify(messageObject));
       
       return {
         success: true,
@@ -278,14 +329,9 @@ export const sendMessage = async (escrowId, content, signer, contract) => {
       };
     } catch (pinataError) {
       console.warn('Pinata upload failed, using local storage fallback:', pinataError);
-      // Fallback to local storage
-      const mockCid = `local-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
-      localStorage.setItem(`${MESSAGE_CID_PREFIX}${escrowId}`, mockCid);
-      localStorage.setItem(mockCid, JSON.stringify(messageObject));
-      
+      // We're already using local storage as the primary method, so just return success
       return {
         success: true,
-        cid: mockCid,
         messages,
         messageObject,
         warning: 'Using local storage due to Pinata upload failure'
@@ -308,9 +354,17 @@ export const sendMessage = async (escrowId, content, signer, contract) => {
  */
 export const loadMessages = async (escrowId, provider = null) => {
   try {
+    // FIRST check local storage as it has the freshest messages
+    const localData = loadMessagesLocally(escrowId);
+    if (localData) {
+      console.log(`Found ${localData.messages.length} messages in local storage for escrow ${escrowId}`);
+      return localData;
+    }
+    
+    // If nothing in local storage, try IPFS
     let cid = null;
     
-    // Try to get CID from local storage first
+    // Try to get CID from local storage
     const cachedCid = localStorage.getItem(`${MESSAGE_CID_PREFIX}${escrowId}`);
     if (cachedCid) {
       cid = cachedCid;
@@ -333,12 +387,19 @@ export const loadMessages = async (escrowId, provider = null) => {
         if (cid.startsWith('local-')) {
           const storedData = localStorage.getItem(cid);
           if (storedData) {
-            return JSON.parse(storedData);
+            const parsedData = JSON.parse(storedData);
+            // Also store in the shared key for future access
+            storeMessagesLocally(escrowId, parsedData.messages);
+            return parsedData;
           }
         }
         
         // Otherwise, fetch from IPFS
         const messages = await fetchMessagesFromIPFS(cid);
+        if (messages && messages.messages) {
+          // Store in local storage for future access
+          storeMessagesLocally(escrowId, messages.messages);
+        }
         return messages;
       } catch (error) {
         console.warn('Error loading messages from IPFS:', error);

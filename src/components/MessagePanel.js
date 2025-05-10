@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Form, Button, Spinner, Alert, Badge } from 'react-bootstrap';
+import { ethers } from 'ethers';
 import { loadMessages, sendMessage, verifyMessage, formatMessageDate, isEscrowParticipant } from '../utils/ipfsMessageService';
 
 // Helper function to truncate address for display
@@ -13,7 +14,7 @@ const truncateAddress = (address) => {
  * @param {Object} props Component props
  * @param {string} props.escrowId Escrow ID
  * @param {string} props.account User's Ethereum address
- * @param {Object} props.signer Ethers.js signer
+ * @param {Object} props.signer Ethers signer
  * @param {Object} props.contract Escrow contract instance
  */
 const MessagePanel = ({ escrowId, account, signer, contract }) => {
@@ -26,6 +27,7 @@ const MessagePanel = ({ escrowId, account, signer, contract }) => {
   const [participantInfo, setParticipantInfo] = useState(null); // Role information
   const [escrowDetails, setEscrowDetails] = useState(null);
   const messagesEndRef = useRef(null);
+  const [refreshCount, setRefreshCount] = useState(0);
 
   // Check if user is a participant and determine their role
   useEffect(() => {
@@ -83,7 +85,9 @@ const MessagePanel = ({ escrowId, account, signer, contract }) => {
       try {
         const result = await loadMessages(escrowId, signer?.provider);
         if (result && Array.isArray(result.messages)) {
-          setMessages(result.messages);
+          // Sort messages by timestamp to ensure correct order
+          const sortedMessages = [...result.messages].sort((a, b) => a.timestamp - b.timestamp);
+          setMessages(sortedMessages);
         } else {
           setMessages([]);
         }
@@ -97,10 +101,14 @@ const MessagePanel = ({ escrowId, account, signer, contract }) => {
     
     fetchMessages();
     
-    // Set up polling to check for new messages every 30 seconds
-    const interval = setInterval(fetchMessages, 30000);
+    // Set up polling to check for new messages every 5 seconds
+    const interval = setInterval(() => {
+      fetchMessages();
+      setRefreshCount(prev => prev + 1);
+    }, 5000);
+    
     return () => clearInterval(interval);
-  }, [escrowId, signer]);
+  }, [escrowId, signer, refreshCount]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -124,13 +132,21 @@ const MessagePanel = ({ escrowId, account, signer, contract }) => {
       const result = await sendMessage(escrowId, newMessage, signer, contract);
       
       if (result.success) {
+        // Sort messages by timestamp
+        let updatedMessages = [];
         if (Array.isArray(result.messages)) {
-          setMessages(result.messages);
+          updatedMessages = [...result.messages];
         } else if (result.messageObject && Array.isArray(result.messageObject.messages)) {
-          setMessages(result.messageObject.messages);
+          updatedMessages = [...result.messageObject.messages];
         }
         
+        // Sort by timestamp to ensure correct order
+        updatedMessages.sort((a, b) => a.timestamp - b.timestamp);
+        setMessages(updatedMessages);
         setNewMessage('');
+        
+        // Force a refresh to sync messages with other participants
+        setRefreshCount(prev => prev + 1);
       } else {
         setError(`Failed to send message: ${result.error}`);
       }
@@ -140,6 +156,11 @@ const MessagePanel = ({ escrowId, account, signer, contract }) => {
     } finally {
       setSending(false);
     }
+  };
+
+  // Force refresh messages
+  const handleRefresh = async () => {
+    setRefreshCount(prev => prev + 1);
   };
 
   // Get the role of a sender based on their address
@@ -191,11 +212,22 @@ const MessagePanel = ({ escrowId, account, signer, contract }) => {
     <div className="message-panel mt-4">
       <div className="d-flex justify-content-between align-items-center mb-2">
         <h5>Escrow Messages</h5>
-        {renderRoleBadge()}
+        <div className="d-flex align-items-center">
+          {renderRoleBadge()}
+          <Button 
+            variant="outline-secondary" 
+            size="sm" 
+            className="ms-2"
+            onClick={handleRefresh}
+            title="Refresh messages"
+          >
+            🔄 Refresh
+          </Button>
+        </div>
       </div>
       
       <p className="text-muted small">
-        Messages are stored on IPFS and cryptographically signed by the sender
+        Messages are stored locally and accessible to all participants
       </p>
       
       {error && (
@@ -231,7 +263,7 @@ const MessagePanel = ({ escrowId, account, signer, contract }) => {
               
               return (
                 <div 
-                  key={index} 
+                  key={`${index}-${msg.timestamp}`} 
                   className={`message mb-3 p-2 rounded ${isCurrentUser ? 'bg-primary text-white ms-5' : 'bg-white border me-5'}`}
                 >
                   <div className="message-header d-flex justify-content-between align-items-center mb-1">
@@ -289,7 +321,7 @@ const MessagePanel = ({ escrowId, account, signer, contract }) => {
         </div>
         <small className="text-muted mt-1 d-block">
           {isParticipant 
-            ? "Messages are verified with your wallet signature" 
+            ? "Messages are stored locally and shared with all participants" 
             : "You must be a buyer, seller, or arbiter to send messages"}
         </small>
       </Form>
