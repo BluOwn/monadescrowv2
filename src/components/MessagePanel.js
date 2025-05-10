@@ -2,10 +2,20 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Form, Button, Spinner, Alert, Badge } from 'react-bootstrap';
 import { loadMessages, sendMessage, verifyMessage, formatMessageDate, isEscrowParticipant } from '../utils/ipfsMessageService';
 
+// Helper function to truncate address for display
 const truncateAddress = (address) => {
   return address ? `${address.slice(0, 6)}...${address.slice(-4)}` : '';
 };
 
+/**
+ * MessagePanel component for escrow communications
+ * 
+ * @param {Object} props Component props
+ * @param {string} props.escrowId Escrow ID
+ * @param {string} props.account User's Ethereum address
+ * @param {Object} props.signer Ethers.js signer
+ * @param {Object} props.contract Escrow contract instance
+ */
 const MessagePanel = ({ escrowId, account, signer, contract }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
@@ -99,6 +109,7 @@ const MessagePanel = ({ escrowId, account, signer, contract }) => {
     }
   }, [messages]);
 
+  // Handle sending a new message
   const handleSendMessage = async (e) => {
     e.preventDefault();
     
@@ -108,7 +119,7 @@ const MessagePanel = ({ escrowId, account, signer, contract }) => {
     setError('');
     
     try {
-      console.log(`Attempting to send message for escrow ${escrowId} from account ${account}`);
+      console.log(`Sending message for escrow ${escrowId} from account ${account}`);
       
       const result = await sendMessage(escrowId, newMessage, signer, contract);
       
@@ -144,6 +155,20 @@ const MessagePanel = ({ escrowId, account, signer, contract }) => {
       return 'Arbiter';
     }
     return '';
+  };
+
+  // Get badge variant based on role
+  const getRoleBadgeVariant = (role) => {
+    switch (role) {
+      case 'Buyer': 
+        return 'primary';
+      case 'Seller': 
+        return 'success';
+      case 'Arbiter': 
+        return 'info';
+      default: 
+        return 'secondary';
+    }
   };
 
   // Render the role badge based on participant info
@@ -202,6 +227,7 @@ const MessagePanel = ({ escrowId, account, signer, contract }) => {
               const isCurrentUser = msg.sender && account && msg.sender.toLowerCase() === account.toLowerCase();
               const isVerified = verifyMessage(msg);
               const senderRole = getSenderRole(msg.sender);
+              const roleBadgeVariant = getRoleBadgeVariant(senderRole);
               
               return (
                 <div 
@@ -209,10 +235,20 @@ const MessagePanel = ({ escrowId, account, signer, contract }) => {
                   className={`message mb-3 p-2 rounded ${isCurrentUser ? 'bg-primary text-white ms-5' : 'bg-white border me-5'}`}
                 >
                   <div className="message-header d-flex justify-content-between align-items-center mb-1">
-                    <small className="sender fw-bold">
-                      {isCurrentUser ? 'You' : truncateAddress(msg.sender)}
-                      {senderRole && <span className="ms-1">({senderRole})</span>}
-                    </small>
+                    <div>
+                      <small className="sender fw-bold">
+                        {isCurrentUser ? 'You' : truncateAddress(msg.sender)}
+                      </small>
+                      {senderRole && (
+                        <Badge 
+                          bg={roleBadgeVariant} 
+                          className="ms-1" 
+                          style={{ fontSize: '0.7rem' }}
+                        >
+                          {senderRole}
+                        </Badge>
+                      )}
+                    </div>
                     <small className="timestamp text-muted" style={{ fontSize: '0.75rem', color: isCurrentUser ? 'rgba(255,255,255,0.7)' : '' }}>
                       {formatMessageDate(msg.timestamp)}
                     </small>

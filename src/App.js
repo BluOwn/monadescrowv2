@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import { Button, Card, Container, Form, ListGroup, Nav, Spinner, Alert, Modal, Badge } from 'react-bootstrap';
+import { Button, Card, Container, Form, ListGroup, Nav, Spinner, Alert, Modal, Badge, Tabs, Tab } from 'react-bootstrap';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
 
@@ -23,872 +23,29 @@ import {
   NetworkWarning
 } from './components/SecurityComponents';
 
-// Import MessagePanel component
+// Import Components
 import MessagePanel from './components/MessagePanel';
-
-// Import Contact Form
 import ContactForm from './components/ContactForm';
+import TokenSelector from './components/TokenSelector';
+import DocumentUploader from './components/DocumentUploader';
+import DisputeReasonSelector from './components/DisputeReasonSelector';
 
 // Creator Information
 const CREATOR_WALLET = "0x0b977acab5d9b8f654f48090955f5e00973be0fe";
 const CREATOR_TWITTER = "@Oprimedev";
 
 // ABI for the EscrowService contract
-const ESCROW_SERVICE_ABI = [
-	{
-		"inputs": [
-			{
-				"internalType": "bytes32",
-				"name": "operationId",
-				"type": "bytes32"
-			}
-		],
-		"name": "cancelTimelock",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"stateMutability": "nonpayable",
-		"type": "constructor"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "by",
-				"type": "address"
-			}
-		],
-		"name": "ContractPaused",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "by",
-				"type": "address"
-			}
-		],
-		"name": "ContractUnpaused",
-		"type": "event"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "seller",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "arbiter",
-				"type": "address"
-			},
-			{
-				"internalType": "string",
-				"name": "description",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "documentHash",
-				"type": "string"
-			}
-		],
-		"name": "createEscrow",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"stateMutability": "payable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "seller",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "arbiter",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "tokenAddress",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "amount",
-				"type": "uint256"
-			},
-			{
-				"internalType": "string",
-				"name": "description",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "documentHash",
-				"type": "string"
-			}
-		],
-		"name": "createTokenEscrow",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "uint256",
-				"name": "escrowId",
-				"type": "uint256"
-			},
-			{
-				"indexed": false,
-				"internalType": "address",
-				"name": "initiator",
-				"type": "address"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint8",
-				"name": "reason",
-				"type": "uint8"
-			}
-		],
-		"name": "DisputeRaised",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "uint256",
-				"name": "escrowId",
-				"type": "uint256"
-			},
-			{
-				"indexed": false,
-				"internalType": "address",
-				"name": "recipient",
-				"type": "address"
-			}
-		],
-		"name": "DisputeResolved",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "uint256",
-				"name": "escrowId",
-				"type": "uint256"
-			},
-			{
-				"indexed": false,
-				"internalType": "address",
-				"name": "buyer",
-				"type": "address"
-			},
-			{
-				"indexed": false,
-				"internalType": "address",
-				"name": "seller",
-				"type": "address"
-			}
-		],
-		"name": "EscrowCreated",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "escrowId",
-				"type": "uint256"
-			},
-			{
-				"indexed": false,
-				"internalType": "address",
-				"name": "tokenAddress",
-				"type": "address"
-			}
-		],
-		"name": "EscrowDetails",
-		"type": "event"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "tokenAddress",
-				"type": "address"
-			}
-		],
-		"name": "executeAddToken",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "newFee",
-				"type": "uint256"
-			}
-		],
-		"name": "executeFeeUpdate",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "newRecipient",
-				"type": "address"
-			}
-		],
-		"name": "executeRecipientUpdate",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "tokenAddress",
-				"type": "address"
-			}
-		],
-		"name": "executeRemoveToken",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": false,
-				"internalType": "address",
-				"name": "oldRecipient",
-				"type": "address"
-			},
-			{
-				"indexed": false,
-				"internalType": "address",
-				"name": "newRecipient",
-				"type": "address"
-			}
-		],
-		"name": "FeeRecipientUpdated",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "oldFee",
-				"type": "uint256"
-			},
-			{
-				"indexed": false,
-				"internalType": "uint256",
-				"name": "newFee",
-				"type": "uint256"
-			}
-		],
-		"name": "FeeUpdated",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "uint256",
-				"name": "escrowId",
-				"type": "uint256"
-			},
-			{
-				"indexed": false,
-				"internalType": "address",
-				"name": "buyer",
-				"type": "address"
-			}
-		],
-		"name": "FundsRefunded",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "uint256",
-				"name": "escrowId",
-				"type": "uint256"
-			},
-			{
-				"indexed": false,
-				"internalType": "address",
-				"name": "seller",
-				"type": "address"
-			}
-		],
-		"name": "FundsReleased",
-		"type": "event"
-	},
-	{
-		"inputs": [],
-		"name": "pauseContract",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "tokenAddress",
-				"type": "address"
-			}
-		],
-		"name": "proposeAddToken",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "newFee",
-				"type": "uint256"
-			}
-		],
-		"name": "proposeFeeUpdate",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "newRecipient",
-				"type": "address"
-			}
-		],
-		"name": "proposeRecipientUpdate",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "tokenAddress",
-				"type": "address"
-			}
-		],
-		"name": "proposeRemoveToken",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "escrowId",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint8",
-				"name": "reason",
-				"type": "uint8"
-			},
-			{
-				"internalType": "string",
-				"name": "description",
-				"type": "string"
-			}
-		],
-		"name": "raiseDispute",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "escrowId",
-				"type": "uint256"
-			}
-		],
-		"name": "refundBuyer",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "escrowId",
-				"type": "uint256"
-			}
-		],
-		"name": "releaseFunds",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "escrowId",
-				"type": "uint256"
-			},
-			{
-				"internalType": "address",
-				"name": "recipient",
-				"type": "address"
-			}
-		],
-		"name": "resolveDispute",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "bytes32",
-				"name": "operationId",
-				"type": "bytes32"
-			}
-		],
-		"name": "TimelockCancelled",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "bytes32",
-				"name": "operationId",
-				"type": "bytes32"
-			}
-		],
-		"name": "TimelockExecuted",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "bytes32",
-				"name": "operationId",
-				"type": "bytes32"
-			},
-			{
-				"indexed": false,
-				"internalType": "string",
-				"name": "operation",
-				"type": "string"
-			}
-		],
-		"name": "TimelockInitiated",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": false,
-				"internalType": "address",
-				"name": "tokenAddress",
-				"type": "address"
-			},
-			{
-				"indexed": false,
-				"internalType": "bool",
-				"name": "supported",
-				"type": "bool"
-			}
-		],
-		"name": "TokenStatusUpdated",
-		"type": "event"
-	},
-	{
-		"inputs": [],
-		"name": "unpauseContract",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "amount",
-				"type": "uint256"
-			}
-		],
-		"name": "calculateFee",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "CREATOR",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "feePercentage",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "feeRecipient",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "getDefaultArbiter",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"stateMutability": "pure",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "escrowId",
-				"type": "uint256"
-			}
-		],
-		"name": "getDisputeDetails",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "initiator",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "timestamp",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint8",
-				"name": "reason",
-				"type": "uint8"
-			},
-			{
-				"internalType": "string",
-				"name": "description",
-				"type": "string"
-			},
-			{
-				"internalType": "bool",
-				"name": "resolved",
-				"type": "bool"
-			},
-			{
-				"internalType": "address",
-				"name": "resolvedInFavorOf",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "resolutionTime",
-				"type": "uint256"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "getEscrowCount",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "escrowId",
-				"type": "uint256"
-			}
-		],
-		"name": "getEscrowDetails",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "buyer",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "seller",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "arbiter",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "tokenAddress",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "amount",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "creationTime",
-				"type": "uint256"
-			},
-			{
-				"internalType": "bool",
-				"name": "fundsDisbursed",
-				"type": "bool"
-			},
-			{
-				"internalType": "bool",
-				"name": "disputeRaised",
-				"type": "bool"
-			},
-			{
-				"internalType": "string",
-				"name": "description",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "documentHash",
-				"type": "string"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "getSupportedTokens",
-		"outputs": [
-			{
-				"internalType": "address[]",
-				"name": "",
-				"type": "address[]"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "user",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "offset",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "limit",
-				"type": "uint256"
-			}
-		],
-		"name": "getUserEscrows",
-		"outputs": [
-			{
-				"internalType": "uint256[]",
-				"name": "escrowIds",
-				"type": "uint256[]"
-			},
-			{
-				"internalType": "uint256",
-				"name": "totalCount",
-				"type": "uint256"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "paused",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"name": "supportedTokens",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"name": "supportedTokensList",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "bytes32",
-				"name": "",
-				"type": "bytes32"
-			}
-		],
-		"name": "timelockExpirations",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	}
-];
+import { ESCROW_SERVICE_ABI } from './contracts/EscrowServiceABI';
 
 // Helper function to truncate address
 const truncateAddress = (address) => {
   return address.slice(0, 6) + '...' + address.slice(-4);
+};
+
+// Helper for formatting dates
+const formatDate = (timestamp) => {
+  if (!timestamp) return 'Unknown';
+  return new Date(Number(timestamp) * 1000).toLocaleString();
 };
 
 function App() {
@@ -908,13 +65,27 @@ function App() {
   const [selectedEscrowId, setSelectedEscrowId] = useState(null);
   const [selectedEscrow, setSelectedEscrow] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [contractFeePercentage, setContractFeePercentage] = useState(0);
+  const [feeRecipient, setFeeRecipient] = useState('');
+  const [contractPaused, setContractPaused] = useState(false);
 
   // Form states
   const [sellerAddress, setSellerAddress] = useState('');
   const [arbiterAddress, setArbiterAddress] = useState('');
   const [amount, setAmount] = useState('');
+  const [description, setDescription] = useState('');
+  const [documentHash, setDocumentHash] = useState('');
   const [escrowIdToView, setEscrowIdToView] = useState('');
   const [recipientForDispute, setRecipientForDispute] = useState('');
+  const [disputeReason, setDisputeReason] = useState(0);
+  const [disputeDescription, setDisputeDescription] = useState('');
+  
+  // Token-related states
+  const [useToken, setUseToken] = useState(false);
+  const [selectedToken, setSelectedToken] = useState(null);
+  const [supportedTokens, setSupportedTokens] = useState([]);
+  const [tokenAllowance, setTokenAllowance] = useState('0');
+  const [showApproveModal, setShowApproveModal] = useState(false);
 
   // Security states
   const [showSecurityWarning, setShowSecurityWarning] = useState(false);
@@ -924,6 +95,17 @@ function App() {
   // Loading states for better UX
   const [loadingEscrows, setLoadingEscrows] = useState(false);
   const [loadingArbitratedEscrows, setLoadingArbitratedEscrows] = useState(false);
+  const [loadingTokens, setLoadingTokens] = useState(false);
+  const [loadingContractInfo, setLoadingContractInfo] = useState(false);
+
+  // Pagination
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalEscrows, setTotalEscrows] = useState(0);
+
+  // New escrow creation modals
+  const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [disputeEscrowId, setDisputeEscrowId] = useState(null);
 
   // Initialize security headers on component mount
   useEffect(() => {
@@ -936,6 +118,171 @@ function App() {
       setFirstTimeUser(false);
     }
   }, []);
+
+  // Load contract info like fee percentage, pause status, etc.
+  const loadContractInfo = async (contract) => {
+    try {
+      setLoadingContractInfo(true);
+      
+      // Get fee percentage
+      const fee = await contract.feePercentage();
+      // Fee is in permille (0.1%), convert to human-readable percentage
+      setContractFeePercentage(fee.toNumber() / 10);
+      
+      // Get fee recipient
+      const recipient = await contract.feeRecipient();
+      setFeeRecipient(recipient);
+      
+      // Check if contract is paused
+      const isPaused = await contract.paused();
+      setContractPaused(isPaused);
+      
+      // Get supported tokens
+      await loadSupportedTokens(contract);
+      
+      setLoadingContractInfo(false);
+    } catch (error) {
+      console.error("Error loading contract info:", error);
+      setLoadingContractInfo(false);
+    }
+  };
+
+  // Load supported tokens
+  const loadSupportedTokens = async (contractInstance) => {
+    try {
+      setLoadingTokens(true);
+      
+      const tokenAddresses = await contractInstance.getSupportedTokens();
+      const tokens = [];
+      
+      // Add native token
+      tokens.push({
+        address: '0x0000000000000000000000000000000000000000',
+        symbol: 'MON',
+        name: 'Monad Native Token',
+        decimals: 18,
+        isNative: true
+      });
+      
+      // Get ERC20 token details
+      for (const tokenAddress of tokenAddresses) {
+        // Skip the zero address (native token)
+        if (tokenAddress === '0x0000000000000000000000000000000000000000') continue;
+        
+        try {
+          // Create token contract instance
+          const tokenContract = new ethers.Contract(
+            tokenAddress,
+            [
+              'function symbol() view returns (string)',
+              'function name() view returns (string)',
+              'function decimals() view returns (uint8)'
+            ],
+            provider
+          );
+          
+          // Get token details
+          const [symbol, name, decimals] = await Promise.all([
+            tokenContract.symbol().catch(() => 'UNKNOWN'),
+            tokenContract.name().catch(() => 'Unknown Token'),
+            tokenContract.decimals().catch(() => 18)
+          ]);
+          
+          tokens.push({
+            address: tokenAddress,
+            symbol,
+            name,
+            decimals,
+            isNative: false
+          });
+        } catch (err) {
+          console.warn(`Error loading token details for ${tokenAddress}:`, err);
+          // Add token with limited info
+          tokens.push({
+            address: tokenAddress,
+            symbol: 'UNKNOWN',
+            name: 'Unknown Token',
+            decimals: 18,
+            isNative: false
+          });
+        }
+      }
+      
+      setSupportedTokens(tokens);
+      
+      // Set default token to native MON
+      if (tokens.length > 0 && !selectedToken) {
+        setSelectedToken(tokens[0]);
+      }
+      
+      setLoadingTokens(false);
+    } catch (error) {
+      console.error("Error loading supported tokens:", error);
+      setLoadingTokens(false);
+    }
+  };
+
+  // Check token allowance for selected token
+  const checkTokenAllowance = async (tokenAddress) => {
+    if (!tokenAddress || tokenAddress === '0x0000000000000000000000000000000000000000' || !account || !contract) {
+      return;
+    }
+    
+    try {
+      const tokenContract = new ethers.Contract(
+        tokenAddress,
+        [
+          'function allowance(address owner, address spender) view returns (uint256)'
+        ],
+        provider
+      );
+      
+      const allowance = await tokenContract.allowance(account, ESCROW_SERVICE_ADDRESS);
+      setTokenAllowance(allowance.toString());
+      
+      return allowance;
+    } catch (error) {
+      console.error("Error checking token allowance:", error);
+      setTokenAllowance('0');
+      return ethers.constants.Zero;
+    }
+  };
+
+  // Approve token spending
+  const approveToken = async (tokenAddress, amount) => {
+    if (!tokenAddress || tokenAddress === '0x0000000000000000000000000000000000000000') {
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      
+      const tokenContract = new ethers.Contract(
+        tokenAddress,
+        [
+          'function approve(address spender, uint256 amount) returns (bool)'
+        ],
+        signer
+      );
+      
+      // Approve a large amount to avoid frequent approvals
+      const tx = await tokenContract.approve(ESCROW_SERVICE_ADDRESS, amount);
+      await tx.wait();
+      
+      // Update allowance
+      await checkTokenAllowance(tokenAddress);
+      
+      setLoading(false);
+      setShowApproveModal(false);
+      
+      return true;
+    } catch (error) {
+      console.error("Error approving token:", error);
+      setError(handleError(error, 'approve token'));
+      setLoading(false);
+      return false;
+    }
+  };
 
   // Connect to MetaMask
   const connectWallet = async () => {
@@ -954,7 +301,7 @@ function App() {
         const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
         
         if (accounts.length > 0) {
-          // FIXED: Use Web3Provider instead of BrowserProvider
+          // Use Web3Provider for MetaMask
           const provider = new ethers.providers.Web3Provider(window.ethereum);
           
           // Validate network
@@ -967,7 +314,7 @@ function App() {
           }
           
           const network = await provider.getNetwork();
-          const signer = await provider.getSigner();
+          const signer = provider.getSigner();
           
           setProvider(provider);
           setSigner(signer);
@@ -989,14 +336,14 @@ function App() {
           );
           setContract(escrowContract);
           
-          // Add a small delay to ensure contract is fully initialized
-          await new Promise(resolve => setTimeout(resolve, 500));
+          // Load contract info
+          await loadContractInfo(escrowContract);
           
-          // Load user's escrows with retry logic
-          await loadUserEscrows(escrowContract, accounts[0]);
-          
-          // Load escrows where user is arbiter with retry logic
-          await loadArbitratedEscrows(escrowContract, accounts[0]);
+          // Load escrows with a small delay to ensure contract is fully initialized
+          setTimeout(async () => {
+            await loadUserEscrows(escrowContract, accounts[0]);
+            await loadArbitratedEscrows(escrowContract, accounts[0]);
+          }, 500);
         }
       } catch (error) {
         console.error("Error connecting to MetaMask", error);
@@ -1025,7 +372,7 @@ function App() {
     // Don't connect wallet if user declines
   };
 
-  // FIXED: Load user's escrows with retry logic
+  // Load user's escrows with retry logic
   const loadUserEscrows = async (escrowContract, userAddress, maxRetries = 3) => {
     let retries = 0;
     setLoadingEscrows(true);
@@ -1042,29 +389,61 @@ function App() {
           throw new Error('Contract not properly initialized');
         }
         
-        // FIXED: Make sure to pass all required parameters to getUserEscrows - address, offset, limit
-        const offset = 0;
-        const limit = 100;
+        // Get user escrows with pagination
+        const offset = page * pageSize;
+        const limit = pageSize;
         const result = await escrowContract.getUserEscrows(userAddress, offset, limit);
         
-        // getUserEscrows returns an array of escrow IDs
-        const escrowIds = result[0]; // The first element is the array of IDs
+        const escrowIds = result[0]; // Array of escrow IDs
+        const totalCount = result[1]; // Total count of user's escrows
+        
+        setTotalEscrows(totalCount.toNumber());
         
         const escrowDetails = [];
         for (let i = 0; i < escrowIds.length; i++) {
           try {
             const escrowId = escrowIds[i];
-            // Getting details for each escrow
             const details = await escrowContract.getEscrowDetails(escrowId);
+            
+            const amount = details[4];
+            const tokenAddress = details[3];
+            
+            // Format amount based on token (native or ERC20)
+            let formattedAmount;
+            let symbol = 'MON';
+            
+            if (tokenAddress === ethers.constants.AddressZero) {
+              formattedAmount = ethers.utils.formatEther(amount); 
+            } else {
+              try {
+                const tokenContract = new ethers.Contract(
+                  tokenAddress,
+                  ['function symbol() view returns (string)', 'function decimals() view returns (uint8)'],
+                  provider
+                );
+                
+                const [tokenSymbol, decimals] = await Promise.all([
+                  tokenContract.symbol().catch(() => 'UNKNOWN'),
+                  tokenContract.decimals().catch(() => 18)
+                ]);
+                
+                symbol = tokenSymbol;
+                formattedAmount = ethers.utils.formatUnits(amount, decimals);
+              } catch (err) {
+                console.warn(`Error getting token details for ${tokenAddress}:`, err);
+                formattedAmount = ethers.utils.formatEther(amount);
+              }
+            }
             
             escrowDetails.push({
               id: escrowId,
               buyer: details[0],
               seller: details[1],
               arbiter: details[2],
-              tokenAddress: details[3],
-              amount: ethers.utils.formatEther(details[4]), // Amount is at index 4
-              creationTime: details[5] ? new Date(details[5].toNumber() * 1000).toLocaleString() : 'Unknown',
+              tokenAddress: tokenAddress,
+              amount: formattedAmount,
+              tokenSymbol: symbol,
+              creationTime: formatDate(details[5]),
               fundsDisbursed: details[6],
               disputeRaised: details[7],
               description: details[8] || '',
@@ -1086,7 +465,6 @@ function App() {
         
         if (retries >= maxRetries) {
           setLoadingEscrows(false);
-          // Only show error after all retries failed
           if (error.message.includes('missing revert data')) {
             setError('Unable to load escrows. Please ensure you are connected to the correct network and the contract is deployed. Try refreshing the page.');
           } else {
@@ -1104,36 +482,68 @@ function App() {
     
     while (retries < maxRetries) {
       try {
-        // Add a small delay to ensure contract is properly initialized
         if (retries > 0) {
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
         
-        // First check if contract is properly initialized
         if (!escrowContract || !escrowContract.getEscrowCount) {
           throw new Error('Contract not properly initialized');
         }
         
-        // Get total escrow count
-        const escrowCount = await escrowContract.getEscrowCount();
+        // Get user escrows first - this is more efficient than checking all escrows
+        const offset = 0;
+        const limit = 100; // Higher limit for arbitrated escrows, as they're usually fewer
+        const result = await escrowContract.getUserEscrows(arbiterAddress, offset, limit);
+        
+        const escrowIds = result[0]; // Array of escrow IDs
         
         const arbitratedEscrows = [];
-        
-        // This is a simple approach - in a production app you might want to use events or indexing
-        for (let i = 0; i < escrowCount; i++) {
+        for (let i = 0; i < escrowIds.length; i++) {
           try {
-            const details = await escrowContract.getEscrowDetails(i);
+            const escrowId = escrowIds[i];
+            const details = await escrowContract.getEscrowDetails(escrowId);
             
             // Check if the user is the arbiter for this escrow
             if (details[2].toLowerCase() === arbiterAddress.toLowerCase()) {
+              const amount = details[4];
+              const tokenAddress = details[3];
+              
+              // Format amount based on token
+              let formattedAmount;
+              let symbol = 'MON';
+              
+              if (tokenAddress === ethers.constants.AddressZero) {
+                formattedAmount = ethers.utils.formatEther(amount); 
+              } else {
+                try {
+                  const tokenContract = new ethers.Contract(
+                    tokenAddress,
+                    ['function symbol() view returns (string)', 'function decimals() view returns (uint8)'],
+                    provider
+                  );
+                  
+                  const [tokenSymbol, decimals] = await Promise.all([
+                    tokenContract.symbol().catch(() => 'UNKNOWN'),
+                    tokenContract.decimals().catch(() => 18)
+                  ]);
+                  
+                  symbol = tokenSymbol;
+                  formattedAmount = ethers.utils.formatUnits(amount, decimals);
+                } catch (err) {
+                  console.warn(`Error getting token details for ${tokenAddress}:`, err);
+                  formattedAmount = ethers.utils.formatEther(amount);
+                }
+              }
+              
               arbitratedEscrows.push({
-                id: i,
+                id: escrowId,
                 buyer: details[0],
                 seller: details[1],
                 arbiter: details[2],
-                tokenAddress: details[3],
-                amount: ethers.utils.formatEther(details[4]), // Amount is at index 4
-                creationTime: details[5] ? new Date(details[5].toNumber() * 1000).toLocaleString() : 'Unknown',
+                tokenAddress: tokenAddress,
+                amount: formattedAmount,
+                tokenSymbol: symbol,
+                creationTime: formatDate(details[5]),
                 fundsDisbursed: details[6],
                 disputeRaised: details[7],
                 description: details[8] || '',
@@ -1141,8 +551,7 @@ function App() {
               });
             }
           } catch (err) {
-            // Skip any errors (e.g., if an escrow ID doesn't exist)
-            console.warn(`Error fetching escrow #${i}:`, err);
+            console.warn(`Error fetching escrow #${escrowIds[i]}:`, err);
           }
         }
         
@@ -1156,7 +565,6 @@ function App() {
         
         if (retries >= maxRetries) {
           setLoadingArbitratedEscrows(false);
-          // Only show error after all retries failed
           if (error.message.includes('missing revert data')) {
             setError('Unable to load arbitrated escrows. Please ensure you are connected to the correct network and the contract is deployed. Try refreshing the page.');
           } else {
@@ -1167,12 +575,34 @@ function App() {
     }
   };
 
-  // FIXED: Create new escrow
+  // Get dispute details
+  const loadDisputeDetails = async (escrowId) => {
+    if (!contract || escrowId === null) return null;
+    
+    try {
+      const details = await contract.getDisputeDetails(escrowId);
+      
+      return {
+        initiator: details[0],
+        timestamp: formatDate(details[1]),
+        reason: details[2], // Reason code (0-5)
+        description: details[3] || '',
+        resolved: details[4],
+        resolvedInFavorOf: details[5],
+        resolutionTime: formatDate(details[6])
+      };
+    } catch (error) {
+      console.error(`Error loading dispute details for escrow ${escrowId}:`, error);
+      return null;
+    }
+  };
+
+  // Create new escrow
   const handleCreateEscrow = async (e) => {
     e.preventDefault();
     
     try {
-      // Validate inputs with clear error messages
+      // Validate inputs
       if (!sellerAddress) {
         throw new Error('Seller address is required');
       }
@@ -1199,52 +629,107 @@ function App() {
       setLoading(true);
       setError('');
       
-      // Parse amount to wei
-      const amountInWei = ethers.utils.parseEther(amount);
+      let tx;
       
-      // Log parameters for debugging
-      console.log('Creating escrow with params:', {
-        seller: sellerAddress,
-        arbiter: arbiterAddress,
-        amount: amountInWei.toString()
-      });
-      
-      // Add description and document hash parameters (empty strings for now)
-      const description = ""; // Optional description
-      const documentHash = ""; // Optional document hash
-      
-      // Call contract method directly to avoid problems with the utility function
-      const tx = await contract.createEscrow(
-        sellerAddress, 
-        arbiterAddress,
-        description,
-        documentHash,
-        { value: amountInWei }
-      );
+      if (useToken && selectedToken && !selectedToken.isNative) {
+        // ERC20 token escrow
+        const tokenAddress = selectedToken.address;
+        const decimals = selectedToken.decimals || 18;
+        const amountInTokenUnits = ethers.utils.parseUnits(amount, decimals);
+        
+        // Check if allowance is sufficient
+        const allowance = await checkTokenAllowance(tokenAddress);
+        
+        if (allowance.lt(amountInTokenUnits)) {
+          setShowApproveModal(true);
+          setLoading(false);
+          return;
+        }
+        
+        // Create token escrow
+        tx = await contract.createTokenEscrow(
+          sellerAddress,
+          arbiterAddress,
+          tokenAddress,
+          amountInTokenUnits,
+          description, // Description field
+          documentHash // Document hash field
+        );
+      } else {
+        // Native currency escrow
+        const amountInWei = ethers.utils.parseEther(amount);
+        
+        tx = await contract.createEscrow(
+          sellerAddress, 
+          arbiterAddress,
+          description, // Description field
+          documentHash, // Document hash field
+          { value: amountInWei }
+        );
+      }
       
       // Wait for confirmation
       const receipt = await tx.wait();
       
-      setSuccessMessage(`Escrow created successfully! Transaction hash: ${receipt.transactionHash}`);
+      // Extract escrow ID from events
+      let escrowId;
+      const escrowCreatedEvent = receipt.events?.find(
+        event => event.event === 'EscrowCreated'
+      );
+      
+      if (escrowCreatedEvent && escrowCreatedEvent.args) {
+        escrowId = escrowCreatedEvent.args[0].toString();
+        setSuccessMessage(`Escrow #${escrowId} created successfully! Transaction hash: ${receipt.transactionHash}`);
+      } else {
+        setSuccessMessage(`Escrow created successfully! Transaction hash: ${receipt.transactionHash}`);
+      }
+      
+      // Reset form
       setSellerAddress('');
       setArbiterAddress('');
       setAmount('');
+      setDescription('');
+      setDocumentHash('');
+      setUseToken(false);
+      setSelectedToken(supportedTokens.find(t => t.isNative) || null);
       
       // Reload escrows after a short delay
       setTimeout(async () => {
         try {
           await loadUserEscrows(contract, account);
           await loadArbitratedEscrows(contract, account);
+          
+          // If escrow ID was extracted, view its details
+          if (escrowId) {
+            viewEscrowDetails(escrowId);
+          }
         } catch (err) {
           console.error('Error reloading escrows:', err);
         }
       }, 2000);
     } catch (error) {
       console.error("Error creating escrow:", error);
-      // Show user-friendly error message
       setError(typeof error === 'string' ? error : (error.message || 'Failed to create escrow'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Handle approve modal
+  const handleApproveToken = async () => {
+    if (!selectedToken || selectedToken.isNative) return;
+    
+    const decimals = selectedToken.decimals || 18;
+    const amountInTokenUnits = ethers.utils.parseUnits(amount, decimals);
+    
+    // Approve a bit more than needed to account for potential fee changes
+    const amountToApprove = amountInTokenUnits.mul(120).div(100); // 120% of the amount
+    
+    const success = await approveToken(selectedToken.address, amountToApprove);
+    
+    if (success) {
+      // Continue with escrow creation
+      handleCreateEscrow({ preventDefault: () => {} });
     }
   };
 
@@ -1255,25 +740,105 @@ function App() {
       setError('');
       
       const details = await contract.getEscrowDetails(escrowId);
+      
+      const amount = details[4];
+      const tokenAddress = details[3];
+      
+      // Format amount based on token
+      let formattedAmount;
+      let symbol = 'MON';
+      
+      if (tokenAddress === ethers.constants.AddressZero) {
+        formattedAmount = ethers.utils.formatEther(amount); 
+      } else {
+        try {
+          const tokenContract = new ethers.Contract(
+            tokenAddress,
+            ['function symbol() view returns (string)', 'function decimals() view returns (uint8)'],
+            provider
+          );
+          
+          const [tokenSymbol, decimals] = await Promise.all([
+            tokenContract.symbol().catch(() => 'UNKNOWN'),
+            tokenContract.decimals().catch(() => 18)
+          ]);
+          
+          symbol = tokenSymbol;
+          formattedAmount = ethers.utils.formatUnits(amount, decimals);
+        } catch (err) {
+          console.warn(`Error getting token details for ${tokenAddress}:`, err);
+          formattedAmount = ethers.utils.formatEther(amount);
+        }
+      }
+      
       const escrow = {
         id: escrowId,
         buyer: details[0],
         seller: details[1],
         arbiter: details[2],
-        tokenAddress: details[3],
-        amount: ethers.utils.formatEther(details[4]),
-        creationTime: details[5] ? new Date(details[5].toNumber() * 1000).toLocaleString() : 'Unknown',
+        tokenAddress: tokenAddress,
+        amount: formattedAmount,
+        tokenSymbol: symbol,
+        creationTime: formatDate(details[5]),
         fundsDisbursed: details[6],
         disputeRaised: details[7],
         description: details[8] || '',
         documentHash: details[9] || ''
       };
       
+      // If there's a dispute, load dispute details
+      if (escrow.disputeRaised) {
+        const disputeDetails = await loadDisputeDetails(escrowId);
+        escrow.dispute = disputeDetails;
+      }
+      
       setSelectedEscrow(escrow);
       setShowDetailsModal(true);
     } catch (error) {
       console.error("Error viewing escrow", error);
       setError('Failed to view escrow: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle raising dispute
+  const handleRaiseDispute = async (escrowId) => {
+    setDisputeEscrowId(escrowId);
+    setDisputeReason(0); // Default reason
+    setDisputeDescription('');
+    setShowDisputeModal(true);
+  };
+
+  // Submit dispute
+  const submitDispute = async () => {
+    if (!disputeEscrowId) return;
+    
+    try {
+      setLoading(true);
+      setError('');
+      
+      const tx = await contract.raiseDispute(
+        disputeEscrowId,
+        disputeReason,
+        disputeDescription
+      );
+      
+      const receipt = await tx.wait();
+      
+      setSuccessMessage(`Dispute raised successfully! Transaction hash: ${receipt.transactionHash}`);
+      setShowDisputeModal(false);
+      
+      // Reload escrows and update details if modal is open
+      await loadUserEscrows(contract, account);
+      await loadArbitratedEscrows(contract, account);
+      
+      if (selectedEscrow && selectedEscrow.id === disputeEscrowId) {
+        viewEscrowDetails(disputeEscrowId);
+      }
+    } catch (error) {
+      console.error("Error raising dispute:", error);
+      setError(handleError(error, 'raise dispute'));
     } finally {
       setLoading(false);
     }
@@ -1293,10 +858,6 @@ function App() {
           break;
         case 'refund':
           tx = await contract.refundBuyer(escrowId);
-          break;
-        case 'dispute':
-          // Default reason is 1 (general dispute), description is empty string
-          tx = await contract.raiseDispute(escrowId, 1, "");
           break;
         case 'resolve':
           if (!recipient) {
@@ -1352,6 +913,41 @@ function App() {
     }
   };
 
+  // Calculate estimated fee
+  const calculateEstimatedFee = () => {
+    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+      return '0';
+    }
+    
+    // Fee is contractFeePercentage / 100 * amount
+    const fee = (parseFloat(amount) * contractFeePercentage) / 1000;
+    return fee.toFixed(6);
+  };
+
+  // Format dispute reason code into human readable text
+  const formatDisputeReason = (reasonCode) => {
+    const reasons = [
+      'Product Not Received',
+      'Product Damaged',
+      'Product Not As Described',
+      'Service Not Provided',
+      'Service Quality Poor',
+      'Other'
+    ];
+    
+    return reasons[reasonCode] || 'Unknown';
+  };
+
+  // Handle token selection
+  const handleTokenSelect = (token) => {
+    setSelectedToken(token);
+    
+    // Check allowance if it's an ERC20 token
+    if (token && !token.isNative) {
+      checkTokenAllowance(token.address);
+    }
+  };
+
   // Effect for handling account changes
   useEffect(() => {
     if (window.ethereum) {
@@ -1382,11 +978,39 @@ function App() {
     }
   }, [contract]);
 
+  // Effect to check token allowance when token selection changes
+  useEffect(() => {
+    if (selectedToken && !selectedToken.isNative && connected) {
+      checkTokenAllowance(selectedToken.address);
+    }
+  }, [selectedToken, connected]);
+
   // Retry loading escrows button
   const retryLoadingEscrows = async () => {
     if (contract && account) {
       await loadUserEscrows(contract, account);
       await loadArbitratedEscrows(contract, account);
+    }
+  };
+
+  // Pagination handlers
+  const handlePrevPage = () => {
+    if (page > 0) {
+      setPage(page - 1);
+      // Reload with new page
+      if (contract && account) {
+        loadUserEscrows(contract, account);
+      }
+    }
+  };
+
+  const handleNextPage = () => {
+    if ((page + 1) * pageSize < totalEscrows) {
+      setPage(page + 1);
+      // Reload with new page
+      if (contract && account) {
+        loadUserEscrows(contract, account);
+      }
     }
   };
 
@@ -1396,6 +1020,12 @@ function App() {
         <div className="app-header">
           <h1>Monad Escrow Service</h1>
           <p>Secure your transactions with smart contract escrow on Monad Testnet</p>
+          {contractPaused && connected && (
+            <Alert variant="warning" className="mt-2">
+              <strong>⚠️ Notice:</strong> The escrow service is currently paused. 
+              You can view existing escrows, but new escrows cannot be created.
+            </Alert>
+          )}
         </div>
         
         {/* Security Warning Modal */}
@@ -1405,6 +1035,69 @@ function App() {
           onDecline={handleSecurityDecline}
         />
         
+        {/* Token Approval Modal */}
+        <Modal show={showApproveModal} onHide={() => setShowApproveModal(false)}>
+          <Modal.Header closeButton>
+            <Modal.Title>Token Approval Required</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <p>To create an escrow with {selectedToken?.symbol}, you need to approve the escrow contract to use your tokens.</p>
+            <p>Amount to escrow: {amount} {selectedToken?.symbol}</p>
+            <p>Current allowance: {ethers.utils.formatUnits(tokenAllowance, selectedToken?.decimals || 18)} {selectedToken?.symbol}</p>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={() => setShowApproveModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleApproveToken} disabled={loading}>
+              {loading ? <Spinner animation="border" size="sm" /> : 'Approve Token'}
+            </Button>
+          </Modal.Footer>
+        </Modal>
+        
+        {/* Dispute Modal */}
+        <Modal show={showDisputeModal} onHide={() => setShowDisputeModal(false)}>
+          <Modal.Header closeButton>
+            <Modal.Title>Raise Dispute</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <Form>
+              <Form.Group className="mb-3">
+                <Form.Label>Dispute Reason</Form.Label>
+                <Form.Select 
+                  value={disputeReason}
+                  onChange={(e) => setDisputeReason(Number(e.target.value))}
+                >
+                  <option value="0">Product Not Received</option>
+                  <option value="1">Product Damaged</option>
+                  <option value="2">Product Not As Described</option>
+                  <option value="3">Service Not Provided</option>
+                  <option value="4">Service Quality Poor</option>
+                  <option value="5">Other</option>
+                </Form.Select>
+              </Form.Group>
+              <Form.Group className="mb-3">
+                <Form.Label>Description (Optional)</Form.Label>
+                <Form.Control
+                  as="textarea"
+                  rows={3}
+                  value={disputeDescription}
+                  onChange={(e) => setDisputeDescription(e.target.value)}
+                  placeholder="Provide details about the dispute..."
+                />
+              </Form.Group>
+            </Form>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={() => setShowDisputeModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={submitDispute} disabled={loading}>
+              {loading ? <Spinner animation="border" size="sm" /> : 'Raise Dispute'}
+            </Button>
+          </Modal.Footer>
+        </Modal>
+
         {!connected ? (
           <div className="connect-wallet-container">
             <SecurityBanner />
@@ -1457,7 +1150,7 @@ function App() {
             
             <Nav variant="tabs" className="mb-4" activeKey={activeTab} onSelect={(k) => setActiveTab(k)}>
               <Nav.Item>
-                <Nav.Link eventKey="create">Create Escrow</Nav.Link>
+                <Nav.Link eventKey="create" disabled={contractPaused}>Create Escrow</Nav.Link>
               </Nav.Item>
               <Nav.Item>
                 <Nav.Link eventKey="my">
@@ -1487,61 +1180,143 @@ function App() {
                 <Card.Body>
                   <Card.Title>Create New Escrow</Card.Title>
                   <ContractInfo />
-                  <Form onSubmit={handleCreateEscrow}>
-                    <Form.Group className="mb-3">
-                      <Form.Label>Seller Address</Form.Label>
-                      <Form.Control
-                        type="text"
-                        placeholder="0x..."
-                        value={sellerAddress}
-                        onChange={(e) => setSellerAddress(e.target.value)}
-                        required
-                      />
-                      <Form.Text className="text-muted">
-                        The address that will receive funds when released
-                      </Form.Text>
-                    </Form.Group>
-                    
-                    {/* IMPORTANT: Arbiter Address Field - Required */}
-                    <Form.Group className="mb-3">
-                      <Form.Label style={{ fontWeight: 'bold', color: '#6c5ce7' }}>
-                        Arbiter Address (Required)
-                      </Form.Label>
-                      <Form.Control
-                        type="text"
-                        placeholder="0x..."
-                        value={arbiterAddress}
-                        onChange={(e) => setArbiterAddress(e.target.value)}
-                        required
-                        style={{ borderColor: '#6c5ce7', borderWidth: '2px' }}
-                      />
-                      <Form.Text className="text-muted">
-                        A trusted third party who can resolve disputes and refund funds if needed
-                      </Form.Text>
-                    </Form.Group>
-                    
-                    <Form.Group className="mb-3">
-                      <Form.Label>Amount (MON)</Form.Label>
-                      <Form.Control
-                        type="text"
-                        placeholder="0.01"
-                        value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
-                        required
-                      />
-                      <Form.Text className="text-muted">
-                        The amount to place in escrow (Max: 1000 MON)
-                      </Form.Text>
-                    </Form.Group>
-                    
-                    <Button 
-                      variant="primary" 
-                      type="submit" 
-                      disabled={loading}
-                    >
-                      {loading ? <Spinner animation="border" size="sm" /> : 'Create Escrow'}
-                    </Button>
-                  </Form>
+                  
+                  {contractPaused ? (
+                    <Alert variant="warning">
+                      The escrow service is currently paused. New escrows cannot be created. 
+                      Please check back later or contact the administrator.
+                    </Alert>
+                  ) : (
+                    <Form onSubmit={handleCreateEscrow}>
+                      <Form.Group className="mb-3">
+                        <Form.Label>Seller Address</Form.Label>
+                        <Form.Control
+                          type="text"
+                          placeholder="0x..."
+                          value={sellerAddress}
+                          onChange={(e) => setSellerAddress(e.target.value)}
+                          required
+                        />
+                        <Form.Text className="text-muted">
+                          The address that will receive funds when released
+                        </Form.Text>
+                      </Form.Group>
+                      
+                      {/* Arbiter Address Field */}
+                      <Form.Group className="mb-3">
+                        <Form.Label style={{ fontWeight: 'bold', color: '#6c5ce7' }}>
+                          Arbiter Address (Required)
+                        </Form.Label>
+                        <Form.Control
+                          type="text"
+                          placeholder="0x..."
+                          value={arbiterAddress}
+                          onChange={(e) => setArbiterAddress(e.target.value)}
+                          required
+                          style={{ borderColor: '#6c5ce7', borderWidth: '2px' }}
+                        />
+                        <Form.Text className="text-muted">
+                          A trusted third party who can resolve disputes and refund funds if needed
+                        </Form.Text>
+                      </Form.Group>
+                      
+                      {/* Token Selection */}
+                      <Form.Group className="mb-3">
+                        <Form.Check
+                          type="checkbox"
+                          label="Use ERC-20 Token Instead of Native MON"
+                          checked={useToken}
+                          onChange={(e) => setUseToken(e.target.checked)}
+                          id="use-token-checkbox"
+                        />
+                      </Form.Group>
+                      
+                      {useToken && (
+                        <Form.Group className="mb-3">
+                          <Form.Label>Select Token</Form.Label>
+                          <Form.Select
+                            value={selectedToken?.address || ''}
+                            onChange={(e) => {
+                              const token = supportedTokens.find(t => t.address === e.target.value);
+                              handleTokenSelect(token);
+                            }}
+                            disabled={loadingTokens}
+                          >
+                            {loadingTokens ? (
+                              <option>Loading tokens...</option>
+                            ) : (
+                              supportedTokens
+                                .filter(token => !token.isNative) // Filter out native token
+                                .map(token => (
+                                  <option key={token.address} value={token.address}>
+                                    {token.symbol} - {token.name}
+                                  </option>
+                                ))
+                            )}
+                          </Form.Select>
+                          <Form.Text className="text-muted">
+                            Select the ERC-20 token you want to use
+                          </Form.Text>
+                        </Form.Group>
+                      )}
+                      
+                      <Form.Group className="mb-3">
+                        <Form.Label>Amount ({useToken ? selectedToken?.symbol || 'Token' : 'MON'})</Form.Label>
+                        <Form.Control
+                          type="text"
+                          placeholder="0.01"
+                          value={amount}
+                          onChange={(e) => setAmount(e.target.value)}
+                          required
+                        />
+                        <Form.Text className="text-muted">
+                          The amount to place in escrow
+                          {contractFeePercentage > 0 && (
+                            <>
+                              {' '}(Fee: {calculateEstimatedFee()} {useToken ? selectedToken?.symbol || 'Token' : 'MON'} - {contractFeePercentage / 10}%)
+                            </>
+                          )}
+                        </Form.Text>
+                      </Form.Group>
+                      
+                      {/* Description Field */}
+                      <Form.Group className="mb-3">
+                        <Form.Label>Description (Optional)</Form.Label>
+                        <Form.Control
+                          as="textarea"
+                          rows={3}
+                          placeholder="Describe the purpose of this escrow..."
+                          value={description}
+                          onChange={(e) => setDescription(e.target.value)}
+                        />
+                        <Form.Text className="text-muted">
+                          Provide details about the goods or services being exchanged
+                        </Form.Text>
+                      </Form.Group>
+                      
+                      {/* Document Hash Field */}
+                      <Form.Group className="mb-3">
+                        <Form.Label>Document Hash (Optional)</Form.Label>
+                        <Form.Control
+                          type="text"
+                          placeholder="QmHash..."
+                          value={documentHash}
+                          onChange={(e) => setDocumentHash(e.target.value)}
+                        />
+                        <Form.Text className="text-muted">
+                          Add an IPFS hash or other document reference
+                        </Form.Text>
+                      </Form.Group>
+                      
+                      <Button 
+                        variant="primary" 
+                        type="submit" 
+                        disabled={loading}
+                      >
+                        {loading ? <Spinner animation="border" size="sm" /> : 'Create Escrow'}
+                      </Button>
+                    </Form>
+                  )}
                 </Card.Body>
               </Card>
             )}
@@ -1563,52 +1338,76 @@ function App() {
                       </Button>
                     </div>
                   ) : (
-                    <ListGroup>
-                      {escrows.map((escrow) => (
-                        <ListGroup.Item 
-                          key={escrow.id.toString()} 
-                          className="escrow-item"
-                        >
-                          <div className="escrow-info">
-                            <strong>Escrow #{escrow.id.toString()}</strong>
-                            <p className="mb-0">Amount: {escrow.amount} MON</p>
-                            <div className="escrow-roles">
-                              {account.toLowerCase() === escrow.buyer.toLowerCase() && (
-                                <span className="role-badge buyer-badge">Buyer</span>
-                              )}
-                              {account.toLowerCase() === escrow.seller.toLowerCase() && (
-                                <span className="role-badge seller-badge">Seller</span>
-                              )}
-                              {account.toLowerCase() === escrow.arbiter.toLowerCase() && (
-                                <span className="role-badge arbiter-badge">Arbiter</span>
-                              )}
-                            </div>
-                            <span 
-                              className={`escrow-status ${
-                                escrow.fundsDisbursed 
-                                  ? 'status-completed' 
-                                  : escrow.disputeRaised 
-                                    ? 'status-disputed' 
-                                    : 'status-active'
-                              }`}
-                            >
-                              {escrow.fundsDisbursed 
-                                ? 'Completed' 
-                                : escrow.disputeRaised 
-                                  ? 'Disputed' 
-                                  : 'Active'}
-                            </span>
-                          </div>
-                          <Button 
-                            variant="outline-info" 
-                            size="sm"
-                            onClick={() => viewEscrowDetails(escrow.id)}
+                    <>
+                      <ListGroup>
+                        {escrows.map((escrow) => (
+                          <ListGroup.Item 
+                            key={escrow.id.toString()} 
+                            className="escrow-item"
                           >
-                            View Details
+                            <div className="escrow-info">
+                              <strong>Escrow #{escrow.id.toString()}</strong>
+                              <p className="mb-0">Amount: {escrow.amount} {escrow.tokenSymbol}</p>
+                              <div className="escrow-roles">
+                                {account.toLowerCase() === escrow.buyer.toLowerCase() && (
+                                  <span className="role-badge buyer-badge">Buyer</span>
+                                )}
+                                {account.toLowerCase() === escrow.seller.toLowerCase() && (
+                                  <span className="role-badge seller-badge">Seller</span>
+                                )}
+                                {account.toLowerCase() === escrow.arbiter.toLowerCase() && (
+                                  <span className="role-badge arbiter-badge">Arbiter</span>
+                                )}
+                              </div>
+                              <span 
+                                className={`escrow-status ${
+                                  escrow.fundsDisbursed 
+                                    ? 'status-completed' 
+                                    : escrow.disputeRaised 
+                                      ? 'status-disputed' 
+                                      : 'status-active'
+                                }`}
+                              >
+                                {escrow.fundsDisbursed 
+                                  ? 'Completed' 
+                                  : escrow.disputeRaised 
+                                    ? 'Disputed' 
+                                    : 'Active'}
+                              </span>
+                            </div>
+                            <Button 
+                              variant="outline-info" 
+                              size="sm"
+                              onClick={() => viewEscrowDetails(escrow.id)}
+                            >
+                              View Details
+                            </Button>
+                          </ListGroup.Item>
+                        ))}
+                      </ListGroup>
+                      
+                      {totalEscrows > pageSize && (
+                        <div className="d-flex justify-content-between align-items-center mt-3">
+                          <Button 
+                            variant="outline-secondary" 
+                            size="sm" 
+                            onClick={handlePrevPage}
+                            disabled={page === 0}
+                          >
+                            Previous
                           </Button>
-                        </ListGroup.Item>
-                      ))}
-                    </ListGroup>
+                          <span>Page {page + 1} of {Math.ceil(totalEscrows / pageSize)}</span>
+                          <Button 
+                            variant="outline-secondary" 
+                            size="sm" 
+                            onClick={handleNextPage}
+                            disabled={(page + 1) * pageSize >= totalEscrows}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </Card.Body>
               </Card>
@@ -1642,7 +1441,7 @@ function App() {
                               <strong>Escrow #{escrow.id.toString()}</strong>
                               <span className="role-badge arbiter-badge ms-2">You are the Arbiter</span>
                             </div>
-                            <p className="mb-1">Amount: {escrow.amount} MON</p>
+                            <p className="mb-1">Amount: {escrow.amount} {escrow.tokenSymbol}</p>
                             <p className="mb-1">Buyer: {truncateAddress(escrow.buyer)}</p>
                             <p className="mb-1">Seller: {truncateAddress(escrow.seller)}</p>
                             <span 
@@ -1723,7 +1522,7 @@ function App() {
             )}
             
             {/* Escrow Details Modal */}
-            <Modal show={showDetailsModal} onHide={() => setShowDetailsModal(false)}>
+            <Modal show={showDetailsModal} onHide={() => setShowDetailsModal(false)} size="lg">
               <Modal.Header closeButton>
                 <Modal.Title>Escrow Details</Modal.Title>
               </Modal.Header>
@@ -1753,8 +1552,22 @@ function App() {
                     <p><strong>Buyer:</strong> <span className="address-display">{selectedEscrow.buyer}</span></p>
                     <p><strong>Seller:</strong> <span className="address-display">{selectedEscrow.seller}</span></p>
                     <p><strong>Arbiter:</strong> <span className="address-display">{selectedEscrow.arbiter}</span></p>
-                    <p><strong>Amount:</strong> {selectedEscrow.amount} MON</p>
+                    <p><strong>Amount:</strong> {selectedEscrow.amount} {selectedEscrow.tokenSymbol}</p>
+                    <p><strong>Token Address:</strong> {selectedEscrow.tokenAddress === ethers.constants.AddressZero ? 
+                      'Native MON' : <span className="address-display">{selectedEscrow.tokenAddress}</span>}</p>
                     <p><strong>Created:</strong> {selectedEscrow.creationTime}</p>
+                    
+                    {selectedEscrow.description && (
+                      <div className="mb-3">
+                        <strong>Description:</strong>
+                        <p className="border p-2 rounded bg-light">{selectedEscrow.description}</p>
+                      </div>
+                    )}
+                    
+                    {selectedEscrow.documentHash && (
+                      <p><strong>Document Hash:</strong> <code>{selectedEscrow.documentHash}</code></p>
+                    )}
+                    
                     <p>
                       <strong>Status:</strong>{' '}
                       <span 
@@ -1773,6 +1586,27 @@ function App() {
                             : 'Active'}
                       </span>
                     </p>
+                    
+                    {selectedEscrow.disputeRaised && selectedEscrow.dispute && (
+                      <div className="dispute-details mt-3 p-3 border rounded bg-light">
+                        <h6>Dispute Information</h6>
+                        <p><strong>Initiated By:</strong> {selectedEscrow.dispute.initiator === selectedEscrow.buyer ? 'Buyer' : 'Seller'} ({truncateAddress(selectedEscrow.dispute.initiator)})</p>
+                        <p><strong>Reason:</strong> {formatDisputeReason(selectedEscrow.dispute.reason)}</p>
+                        {selectedEscrow.dispute.description && (
+                          <p><strong>Description:</strong> {selectedEscrow.dispute.description}</p>
+                        )}
+                        <p><strong>Initiated On:</strong> {selectedEscrow.dispute.timestamp}</p>
+                        {selectedEscrow.dispute.resolved && (
+                          <>
+                            <p><strong>Resolved:</strong> Yes</p>
+                            <p><strong>Resolved In Favor Of:</strong> {
+                              selectedEscrow.dispute.resolvedInFavorOf === selectedEscrow.buyer ? 'Buyer' : 'Seller'
+                            } ({truncateAddress(selectedEscrow.dispute.resolvedInFavorOf)})</p>
+                            <p><strong>Resolution Time:</strong> {selectedEscrow.dispute.resolutionTime}</p>
+                          </>
+                        )}
+                      </div>
+                    )}
                     
                     {!selectedEscrow.fundsDisbursed && (
                       <div className="mt-4">
@@ -1809,12 +1643,12 @@ function App() {
                         {/* Dispute Actions (Buyer or Seller) */}
                         {(account.toLowerCase() === selectedEscrow.buyer.toLowerCase() || 
                           account.toLowerCase() === selectedEscrow.seller.toLowerCase()) && 
-                          !selectedEscrow.disputeRaised && (
+                          !selectedEscrow.disputeRaised && !selectedEscrow.fundsDisbursed && (
                           <Button 
                             variant="danger" 
                             size="sm" 
                             className="me-2 mb-2" 
-                            onClick={() => handleEscrowAction('dispute', selectedEscrow.id)}
+                            onClick={() => handleRaiseDispute(selectedEscrow.id)}
                             disabled={loading}
                           >
                             Raise Dispute
@@ -1823,13 +1657,9 @@ function App() {
                         
                         {/* Arbiter Actions */}
                         {account.toLowerCase() === selectedEscrow.arbiter.toLowerCase() && (
-                          <div className="arbiter-actions mt-3">
-                            <div className="arbiter-notice mb-3">
-                              <Alert variant="info">
-                                <strong>Arbiter Controls</strong>
-                                <p className="mb-0">As the arbiter, you can resolve disputes or refund the buyer if needed.</p>
-                              </Alert>
-                            </div>
+                          <div className="arbiter-actions mt-3 p-3 border rounded">
+                            <h6>Arbiter Controls</h6>
+                            <p className="text-muted small">As the arbiter, you can resolve disputes or refund the buyer if needed.</p>
                             
                             {/* Refund Button (always available to arbiter) */}
                             {!selectedEscrow.disputeRaised && !selectedEscrow.fundsDisbursed && (
@@ -1845,7 +1675,7 @@ function App() {
                             )}
                             
                             {/* Dispute Resolution (only if dispute raised) */}
-                            {selectedEscrow.disputeRaised && (
+                            {selectedEscrow.disputeRaised && !selectedEscrow.fundsDisbursed && !selectedEscrow.dispute?.resolved && (
                               <div>
                                 <Form.Group className="mb-2">
                                   <Form.Label>Resolve dispute in favor of:</Form.Label>
@@ -1854,8 +1684,8 @@ function App() {
                                     className="mb-2"
                                   >
                                     <option value="">Select recipient</option>
-                                    <option value={selectedEscrow.buyer}>Buyer</option>
-                                    <option value={selectedEscrow.seller}>Seller</option>
+                                    <option value={selectedEscrow.buyer}>Buyer ({truncateAddress(selectedEscrow.buyer)})</option>
+                                    <option value={selectedEscrow.seller}>Seller ({truncateAddress(selectedEscrow.seller)})</option>
                                   </Form.Select>
                                 </Form.Group>
                                 
